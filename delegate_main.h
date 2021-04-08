@@ -106,7 +106,7 @@ class Delegate {
 
   std::vector<std::shared_ptr<tim::vx::Operation>>& GetOps() { return ops_; }
   std::shared_ptr<tim::vx::Graph>& GetGraph() { return graph_; }
-  std::vector<std::shared_ptr<tim::vx::Tensor>>& GetTensors() {
+  std::map<int32_t, std::shared_ptr<tim::vx::Tensor>>& GetTensors() {
     return tensors_;
   }
 
@@ -126,8 +126,9 @@ class Delegate {
   std::pair<std::shared_ptr<tim::vx::Graph>,
           std::map<std::shared_ptr<tim::vx::Tensor>,
                    std::shared_ptr<tim::vx::Tensor>>> layout_infered_;
-  std::vector<std::shared_ptr<tim::vx::Tensor>> tensors_;
-  std::vector<std::shared_ptr<tim::vx::Tensor>> state_tensors_;
+  std::map<int32_t, std::shared_ptr<tim::vx::Tensor>> tensors_;
+  int32_t placeholder_tensor_idx{-2};
+  std::map<int32_t, std::shared_ptr<tim::vx::Tensor>> state_tensors_;
   std::vector<std::shared_ptr<tim::vx::Operation>> ops_;
   std::vector<OperationDataType> operations_;
   bool compiled_;
