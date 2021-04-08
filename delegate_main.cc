@@ -312,12 +312,14 @@ std::shared_ptr<tim::vx::Tensor> CreateTensor(
 }
 
 std::vector<std::shared_ptr<tim::vx::Tensor>> MapIndexesToTensors(
-    const std::vector<std::shared_ptr<tim::vx::Tensor>>& tensors,
+    const std::map<int32_t, std::shared_ptr<tim::vx::Tensor>>& tensors,
     const std::vector<int>& indexes) {
   std::vector<std::shared_ptr<tim::vx::Tensor>> out_tensors;
   for (const auto& index : indexes) {
     if (index != -1) {
-      out_tensors.push_back(tensors[(index + tensors.size()) % tensors.size()]);
+      auto pos = tensors.find(index);
+      if (pos != tensors.end())
+        out_tensors.push_back(pos->second);
     }
   }
   return out_tensors;
@@ -423,8 +425,6 @@ std::unique_ptr<vx::delegate::OpData> Delegate::Init(
   }
 
   compiled_ = false;
-  tensors_.resize(context->tensors_size + 1 /* for placeholder*/);
-  state_tensors_.resize(context->tensors_size + 1 /* for placeholder*/);
 
   std::unique_ptr<vx::delegate::OpData> op_data(new OpData());
   // Get the list of input and output tensors. This isn't for a single op, it's
@@ -528,8 +528,6 @@ TfLiteStatus Delegate::Invoke(const OpData& op_data,
     context_ = tim::vx::Context::Create();
     graph_ = context_->CreateGraph();
 
-    tensors_[tensors_.size() - 1] = graph_->CreateTensorPlaceHolder();
-
     // Create input tensors
     for (int tensor_idx : op_data.subgraph_inputs) {
       if (-1 != tensor_idx && tensors_[tensor_idx].get() == nullptr) {
@@ -552,8 +550,8 @@ TfLiteStatus Delegate::Invoke(const OpData& op_data,
     for (const auto& op_info : operations_) {
       auto& builtin_code = op_info.builtin_code;
       auto& custom_name = op_info.custom_name;
-      auto& inputs = op_info.inputs;
-      auto& outputs = op_info.outputs;
+      auto inputs = op_info.inputs;
+      auto outputs = op_info.outputs;
       auto& states = op_info.states;
       auto& builtin_data = op_info.builtin_data;
 
@@ -565,7 +563,7 @@ TfLiteStatus Delegate::Invoke(const OpData& op_data,
 
       for (size_t port_idx = 0; port_idx < inputs_outputs.size(); port_idx++) {
         int tensor_idx = inputs_outputs[port_idx];
-        if (-1 != tensor_idx && tensors_[tensor_idx].get() == nullptr) {
+        if (-1 != tensor_idx && tensors_.find(tensor_idx) == tensors_.end()) {
           std::vector<uint32_t> perm;
           auto tensor = &(context->tensors[tensor_idx]);
           tim::vx::TensorAttribute attr = tim::vx::TensorAttribute::TRANSIENT;
@@ -578,10 +576,26 @@ TfLiteStatus Delegate::Invoke(const OpData& op_data,
           }
           tensors_[tensor_idx] = CreateTensor(graph_, tensor, attr, perm);
         }
+        else if (-1 == tensor_idx && builtin_code == 44){
+          // -1 means placeholder for optional inputs: for example LSTM
+          if (tensors_.find(placeholder_tensor_idx) != tensors_.end()) {
+            // Assert(false);
+          }
+          tensors_[placeholder_tensor_idx] = graph_->CreateTensorPlaceHolder();
+
+          if (port_idx < inputs.size()) {
+            inputs[port_idx] = placeholder_tensor_idx;
+          } else {
+            outputs[port_idx - inputs.size()] = placeholder_tensor_idx;
+          }
+
+          placeholder_tensor_idx --;
+        }
       }
 
       // create state output as graph output
       for (auto tensor_idx : states) {
+        // TODO{Sven}: use map.find() instead
         if (-1 != tensor_idx && state_tensors_[tensor_idx].get() == nullptr) {
           const auto tensor = &(context->tensors[tensor_idx]);
           state_tensors_[tensor_idx] = CreateTensor(

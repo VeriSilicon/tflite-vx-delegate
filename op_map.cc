@@ -38,11 +38,14 @@
 #include "tensorflow/lite/kernels/internal/tensor_ctypes.h"
 #include "tensorflow/lite/kernels/internal/types.h"
 #include "tensorflow/lite/minimal_logging.h"
+#include "tensorflow/lite/kernels/kernel_util.h"
+#include "tensorflow/lite/kernels/lstm_shared.h"
 #include "tim/vx/ops.h"
 #include "utils.h"
 #include "vsi_npu_custom_op.h"
 
 using namespace tflite;
+using namespace tflite::ops::builtin;
 
 namespace {
 
@@ -100,7 +103,11 @@ std::shared_ptr<tim::vx::Tensor> ProcessFusedActivation(
   (*op).BindOutput(original_tensor);
 
   delegate->GetOps().push_back(op);
-  delegate->GetTensors().push_back(processed_tensor);
+  // delegate->GetTensors().push_back(processed_tensor);
+  delegate->GetTensors().insert(
+      std::make_pair(delegate->GetTensors().size(),
+      processed_tensor)
+      );
 
   return processed_tensor;
 }
@@ -117,7 +124,11 @@ std::shared_ptr<tim::vx::Tensor> ReverseInputTensor(
   (*op).BindOutput(reversed_tensor);
 
   delegate->GetOps().push_back(op);
-  delegate->GetTensors().push_back(reversed_tensor);
+  // delegate->GetTensors().push_back(reversed_tensor);
+  delegate->GetTensors().insert(
+      std::make_pair(delegate->GetTensors().size(),
+      reversed_tensor)
+      );
 
   return reversed_tensor;
 }
@@ -1646,6 +1657,13 @@ struct GatherNd : public OpMapperBase<EmptyStructPlaceholder> {
 };
 
 struct UnidirectionalSequenceLstm : public OpMapperBase<TfLiteUnidirectionalSequenceLSTMParams> {
+  bool IsOpSupported(TfLiteContext* context,
+                             TfLiteNode* node,
+                             const TfLiteRegistration* registration) const {
+        // TODO
+        return true;
+  }
+
   bool HandleMapOp(vx::delegate::Delegate* delegate,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
@@ -1681,11 +1699,11 @@ struct UnidirectionalSequenceLstm : public OpMapperBase<TfLiteUnidirectionalSequ
         cell_clip, proj_clip, act, forget_bias, time_major, recurrent_act_type, return_sequences);
     auto tensor_placeholder = delegate->GetGraph()->CreateTensorPlaceHolder();
 
-    std::shared_ptr<tim::vx::Tensor> c_state_t = inputs[14];
-    std::shared_ptr<tim::vx::Tensor> h_state_t = inputs[13];
+    std::shared_ptr<tim::vx::Tensor> c_state_t = inputs[lstm::full::kCellStateTensor];
+    std::shared_ptr<tim::vx::Tensor> h_state_t = inputs[lstm::full::kOutputStateTensor];
 
     const auto target_dtype = tim::vx::DataType::FLOAT16;
-    if (c_state_t->GetSpec().datatype_ != target_dtype) {
+    if (c_state_t->GetSpec().datatype_ != target_dtype && c_state_t->GetSpec().datatype_ != tim::vx::DataType::FLOAT32) {
       auto dc_on_c = delegate->GetGraph()->CreateOperation<tim::vx::ops::DataConvert>();
       (*dc_on_c).BindInput(c_state_t);
 
@@ -1697,28 +1715,50 @@ struct UnidirectionalSequenceLstm : public OpMapperBase<TfLiteUnidirectionalSequ
       (*dc_on_c).BindOutput(dc_out_tensor);
     }
 
-    (*op).BindInputs({
-      inputs[0],
+    std::vector<std::shared_ptr<tim::vx::Tensor>> input_tensors = {
+      inputs[lstm::full::kInputTensor],
       h_state_t,
       c_state_t,
-      inputs[1],
-      inputs[2],
-      inputs[3],
-      inputs[4],
 
-      inputs[5],
-      inputs[7],
-      inputs[6],
-      inputs[8],
+      inputs[lstm::full::kInputToInputWeightsTensor],
+      inputs[lstm::full::kInputToForgetWeightsTensor],
+      inputs[lstm::full::kInputToCellWeightsTensor ],
+      inputs[lstm::full::kInputToOutputWeightsTensor ],
 
-      delegate->GetGraph()->CreateTensorPlaceHolder(),       /*weight_c2i*/
-      delegate->GetGraph()->CreateTensorPlaceHolder(),       /*weight_c2f*/
-      delegate->GetGraph()->CreateTensorPlaceHolder(),       /*weight_c2o*/
+      inputs[lstm::full::kRecurrentToInputWeightsTensor],
+      inputs[lstm::full::kRecurrentToForgetWeightsTensor ],
+      inputs[lstm::full::kRecurrentToCellWeightsTensor ],
+      inputs[lstm::full::kRecurrentToOutputWeightsTensor ],
 
-      inputs[9],
-      inputs[10],
-      inputs[11],
-      inputs[12]});
+      // peephole weights : optional
+      inputs[lstm::full::kCellToInputWeightsTensor ],
+      inputs[lstm::full::kCellToForgetWeightsTensor ],
+      inputs[lstm::full::kCellToOutputWeightsTensor ],
+
+      //gate bias : optional
+      inputs[lstm::full::kInputGateBiasTensor ],
+      inputs[lstm::full::kForgetGateBiasTensor ],
+      inputs[lstm::full::kCellGateBiasTensor ],
+      inputs[lstm::full::kOutputGateBiasTensor ],
+
+      // Projection : optional
+      inputs[lstm::full::kProjectionWeightsTensor ],
+      inputs[lstm::full::kProjectionBiasTensor ],
+
+      // AUX?
+    };
+
+    if (inputs.size() == 24) {
+      // LayerNorm: optional
+      input_tensors.push_back(inputs[lstm::full::kInputLayerNormCoefficientsTensor  ]);
+      input_tensors.push_back(inputs[lstm::full::kForgetLayerNormCoefficientsTensor ]);
+      input_tensors.push_back(inputs[lstm::full::kCellLayerNormCoefficientsTensor   ]);
+      input_tensors.push_back(inputs[lstm::full::kOutputLayerNormCoefficientsTensor ]);
+    }
+
+    (*op).BindInputs(
+      input_tensors
+      );
     (*op).BindOutputs(outputs);
 
     delegate->GetOps().push_back(std::move(op));
