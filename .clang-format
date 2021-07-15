@@ -1,0 +1,11 @@
+BasedOnStyle: Google
+CommentPragmas: NOLINT:.*
+DerivePointerAlignment: false
+AllowShortFunctionsOnASingleLine: Inline
+ColumnLimit: 80
+TabWidth: 2
+UseTab: Never
+IndentWidth: 2
+BinPackArguments: false
+BinPackParameters: false
+

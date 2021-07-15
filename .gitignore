@@ -1,0 +1,6 @@
+/bazel-*
+.vscode/
+/build/
+[Bb]uild/
+*_build/
+tim-vx
