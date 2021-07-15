@@ -22,3 +22,9 @@ export VIVANTE_SDK_DIR=`pwd`/tim-vx/prebuilt-sdk/x86_64_linux
 export LD_LIBRARY_PATH=${VIVANTE_SDK_DIR}/lib/:${LD_LIBRARY_PATH}
 ./bazel-bin/benchmark_model --external_delegate_path=bazel-bin/vx_delegate.so --graph=/path/to/your/model.tflite
 ```
+# Build with cmake
+```sh
+mkdir build && cd build
+cmake ..
+make vx_delegate -j4
+```
