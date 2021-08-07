@@ -63,3 +63,5 @@ list(APPEND VX_DELEGATE_DEPENDENCIES ${TIM_VX_INSTALL}/lib/libtim-vx.so)
 
 add_library(vx_delegate SHARED ${VX_DELEGATES_SRCS})
 target_link_libraries(vx_delegate ${VX_DELEGATE_DEPENDENCIES})
+
+add_subdirectory(examples/minimal)
