@@ -28,3 +28,18 @@ mkdir build && cd build
 cmake ..
 make vx_delegate -j4
 ```
+
+
+# Examples
+examples/python/label_image.py
+modified based on [offical label_image](https://github.com/tensorflow/tensorflow/blob/master/tensorflow/lite/examples/python/label_image.py)
+
+    1. build tensorflow-lite runtime python package follow by [offical build instruction](https://github.com/tensorflow/tensorflow/tree/master/tensorflow/lite/tools/pip_package#readme)
+    2. Added "-e" option to provide external provider, [Offical Label Image Instruction](https://github.com/tensorflow/tensorflow/blob/master/tensorflow/lite/examples/python/README.md)
+
+examples/minimal
+modified based on [offical minimal](https://cs.opensource.google/tensorflow/tensorflow/+/master:tensorflow/lite/examples/minimal/)
+
+```sh
+minimal libvx_delegate.so mobilenet_v2_1.0_224_quant.tflite
+```
