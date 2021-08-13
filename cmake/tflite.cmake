@@ -33,6 +33,23 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE "Release")
 endif()
 
+if (${ENABLE_NBG_SUPPORT})
+  FetchContent_GetProperties(tensorflow SOURCE_DIR tf_src_dir)
+
+  # TODO(sven) this make build slow/stuck if modify cmake files after build
+  if (EXISTS ${tf_src_dir}/tensorflow/lite/kernels/vsi_npu_precompiled.cc)
+    message("Patch already applied")
+  else()
+    message("Apply tensorflite patches ...")
+    execute_process(
+    COMMAND git am ${PROJECT_SOURCE_DIR}/patches/tflite/0001-Add-Customized-NBG-Tflite-Model-Support.patch
+    TIMEOUT 2
+    WORKING_DIRECTORY  ${tf_src_dir}
+  )
+  endif()
+
+endif()
+
 # Double colon in target name means ALIAS or IMPORTED target.
 cmake_policy(SET CMP0028 NEW)
 # Enable MACOSX_RPATH (@rpath) for built dynamic libraries.
@@ -332,6 +349,7 @@ populate_tflite_source_vars("kernels"
   TFLITE_KERNEL_SRCS
   FILTER "(.*_test_util_internal|test_.*)\\.(cc|h)"
 )
+
 populate_tflite_source_vars("kernels/internal" TFLITE_KERNEL_INTERNAL_SRCS)
 populate_tflite_source_vars("kernels/internal/optimized"
   TFLITE_KERNEL_INTERNAL_OPT_SRCS

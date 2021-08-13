@@ -66,13 +66,6 @@ limitations under the License.
 
 namespace {
 
-typedef struct {
-  size_t length;
-  size_t input_count;
-  size_t output_cout;
-  char* binary;
-} TfLiteVsiNpuParams;
-
 inline tim::vx::PadType TflitePadTypeToVsiPadType(TfLitePadding pad) {
   switch (pad) {
     case kTfLitePaddingUnknown:
@@ -1146,7 +1139,7 @@ struct SqueezeMapper : public OpMapperBase<TfLiteSqueezeParams> {
         vx_axis[i] = vx::delegate::utils::ConvertAxis(builtin->squeeze_dims[i],
                                                       input_shape.size());
       }
-    } else { // tim-vx always needs axis. 
+    } else { // tim-vx always needs axis.
       for (int i = 0; i < input_shape.size(); ++i) {
         if (input_shape[i] == 1) {
           vx_axis.push_back(i);

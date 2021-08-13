@@ -16,6 +16,8 @@
 cmake_minimum_required(VERSION 3.16)
 project(tflite_vx_delegate)
 
+OPTION(ENABLE_NBG_SUPPORT "enable customized nbg op in tflite" ON)
+
 include(FetchContent)
 FetchContent_Declare(
   tensorflow
