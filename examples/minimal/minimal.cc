@@ -17,6 +17,8 @@ limitations under the License.
 #include <fstream>
 #include <string>
 #include <numeric>
+#include <thread>
+#include <chrono>
 #include "tensorflow/lite/interpreter.h"
 #include "tensorflow/lite/kernels/register.h"
 #include "tensorflow/lite/model.h"
@@ -103,27 +105,30 @@ float cosine(const std::vector<T>& lhs, const std::vector<T>& rhs) {
 
 void setupInput(int argc, char* argv[], const std::unique_ptr<tflite::Interpreter>& interpreter) {
   auto input_list = interpreter->inputs();
+  bool use_random_input = false;
   if (input_list.size() != argc - 3) {
-    std::cout << "Fatal Error: input count not match between command line and model" << std::endl;
-    TFLITE_MINIMAL_CHECK(false);
+    std::cout << "Warning: input count not match between command line and model -> generate random data for inputs" << std::endl;
+    use_random_input = true;
   }
 
   uint32_t i = 3; // argv index
+
   for (auto input_idx = 0; input_idx < input_list.size(); input_idx++) {
     auto in_tensor = interpreter->input_tensor(input_idx);
 
     std::cout << "Setup intput[" << std::string(interpreter->GetInputName(input_idx)) << "]" << std::endl;
+    const char* input_data =  use_random_input ? "/dev/urandom" : argv[i];
 
     switch (in_tensor->type) {
       case kTfLiteFloat32:
       {
-        auto in = read_data<float>(argv[i], in_tensor->bytes);
+        auto in = read_data<float>(input_data, in_tensor->bytes);
         memcpy(interpreter->typed_input_tensor<uint8_t>(input_idx), in.data(), sizeof(float)*in.size());
         break;
       }
       case kTfLiteUInt8:
       case kTfLiteInt8: {
-        auto in = read_data<uint8_t>(argv[i], in_tensor->bytes);
+        auto in = read_data<uint8_t>(input_data, in_tensor->bytes);
         memcpy(interpreter->typed_input_tensor<uint8_t>(input_idx), in.data(), in.size());
         break;
       }
@@ -139,7 +144,7 @@ void setupInput(int argc, char* argv[], const std::unique_ptr<tflite::Interprete
 }
 
 int main(int argc, char* argv[]) {
-  if (argc <= 3) {
+  if (argc <= 2) {
     fprintf(stderr, "minimal <external_delegate.so> <tflite model> <inputs>\n");
     return 1;
   }
@@ -167,12 +172,16 @@ int main(int argc, char* argv[]) {
   tflite::ops::builtin::BuiltinOpResolver resolver;
   tflite::InterpreterBuilder builder(*model, resolver);
   std::unique_ptr<tflite::Interpreter> interpreter;
+  std::unique_ptr<tflite::Interpreter> interpreter_cp;
   builder(&interpreter);
+  builder(&interpreter_cp);
   TFLITE_MINIMAL_CHECK(interpreter != nullptr);
   interpreter->ModifyGraphWithDelegate(ext_delegate_ptr);
+  interpreter_cp->ModifyGraphWithDelegate(ext_delegate_ptr);
 
   // Allocate tensor buffers.
   TFLITE_MINIMAL_CHECK(interpreter->AllocateTensors() == kTfLiteOk);
+  TFLITE_MINIMAL_CHECK(interpreter_cp->AllocateTensors() == kTfLiteOk);
   printf("=== Pre-invoke Interpreter State ===\n");
   tflite::PrintInterpreterState(interpreter.get());
 
@@ -182,9 +191,11 @@ int main(int argc, char* argv[]) {
   // be accessed with `T* input = interpreter->typed_input_tensor<T>(i);`
 
   setupInput(argc, argv, interpreter);
+  setupInput(argc, argv, interpreter_cp);
 
   // Run inference
   TFLITE_MINIMAL_CHECK(interpreter->Invoke() == kTfLiteOk);
+  TFLITE_MINIMAL_CHECK(interpreter_cp->Invoke() == kTfLiteOk);
   printf("\n\n=== Post-invoke Interpreter State ===\n");
   tflite::PrintInterpreterState(interpreter.get());
 
@@ -210,6 +221,63 @@ int main(int argc, char* argv[]) {
   TFLITE_MINIMAL_CHECK(cpu_interpreter->Invoke() == kTfLiteOk);
   printf("\n\n=== Post-invoke CPU Interpreter State ===\n");
   tflite::PrintInterpreterState(cpu_interpreter.get());
+
+  if(0){// do run-sleep-run loop
+    const uint32_t loop_count = 10;
+    auto start = std::chrono::high_resolution_clock::now();
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::milliseconds sleep_{1000};
+
+    for(uint32_t i = 0; i < loop_count; ++i) {
+    auto start_0 = std::chrono::high_resolution_clock::now();
+      interpreter->Invoke();
+    auto end_0 = std::chrono::high_resolution_clock::now();
+      std::chrono::duration<double, std::milli> cost_0, cost_1;
+      cost_0 = end_0 - start_0;
+      std::cout << "[No switch]" << i << "  :cost = " << cost_0.count() << "ms" << std::endl;
+    }
+  }
+  if(0){// do run-sleep-run loop
+    const uint32_t loop_count = 10;
+    auto start = std::chrono::high_resolution_clock::now();
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::milliseconds sleep_{1000};
+
+    for(uint32_t i = 0; i < loop_count; ++i) {
+    auto start_0 = std::chrono::high_resolution_clock::now();
+      interpreter->Invoke();
+    auto end_0 = std::chrono::high_resolution_clock::now();
+    auto start_1 = std::chrono::high_resolution_clock::now();
+      interpreter_cp->Invoke();
+    auto end_1 = std::chrono::high_resolution_clock::now();
+
+      std::chrono::duration<double, std::milli> cost_0, cost_1;
+      cost_0 = end_0 - start_0;
+      cost_1 = end_1 - start_1;
+      std::cout << "[No Sleep]" << i << "  :cost 0 = " << cost_0.count() << "ms\t, cost 1 = " << cost_1.count() << "ms" << std::endl;
+    }
+  }
+  if(0){// do run-sleep-run loop
+    const uint32_t loop_count = 10;
+    auto start = std::chrono::high_resolution_clock::now();
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::milliseconds sleep_{1000};
+
+    for(uint32_t i = 0; i < loop_count; ++i) {
+    auto start_0 = std::chrono::high_resolution_clock::now();
+      interpreter->Invoke();
+    auto end_0 = std::chrono::high_resolution_clock::now();
+      std::this_thread::sleep_for(sleep_);
+    auto start_1 = std::chrono::high_resolution_clock::now();
+      interpreter_cp->Invoke();
+    auto end_1 = std::chrono::high_resolution_clock::now();
+
+      std::chrono::duration<double, std::milli> cost_0, cost_1;
+      cost_0 = end_0 - start_0;
+      cost_1 = end_1 - start_1;
+      std::cout << "[UseSleep] " << i << "  :cost 0 = " << cost_0.count() << "ms\t, cost 1 = " << cost_1.count() << "ms" << std::endl;
+    }
+  }
 
   // Read output buffers
   // TODO(user): Insert getting data out code.
@@ -297,9 +365,9 @@ int main(int argc, char* argv[]) {
                         << "], CPU vx NPU(" << cpu_out_buf[j] << ","
                         << npu_out_buf[j] << ")" << std::endl;
             }
-            std::cout << npu_out_buf[j] << "-" << cpu_out_buf[j] << std::endl;
           }
-          {
+
+          if(0){
             std::vector<float> lhs(bytes / sizeof(float));
             std::vector<float> rhs(bytes / sizeof(float));
 
@@ -321,3 +389,4 @@ int main(int argc, char* argv[]) {
   TfLiteExternalDelegateDelete(ext_delegate_ptr);
   return 0;
 }
+

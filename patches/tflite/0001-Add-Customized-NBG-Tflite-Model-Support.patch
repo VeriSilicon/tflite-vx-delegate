@@ -1,0 +1,162 @@
+From f684a7d13037eeb3acbdcbc05a94190bdfaffb38 Mon Sep 17 00:00:00 2001
+From: "xiang.zhang" <xiang.zhang@verisilicon.com>
+Date: Fri, 13 Aug 2021 18:19:09 +0800
+Subject: [PATCH] Add Customized NBG Tflite Model Support
+
+Signed-off-by: xiang.zhang <xiang.zhang@verisilicon.com>
+
+diff --git a/tensorflow/lite/c/builtin_op_data.h b/tensorflow/lite/c/builtin_op_data.h
+index a0167c3f307..de95a617c77 100644
+--- a/tensorflow/lite/c/builtin_op_data.h
++++ b/tensorflow/lite/c/builtin_op_data.h
+@@ -480,6 +480,13 @@ typedef struct {
+   int body_subgraph_index;
+ } TfLiteWhileParams;
+ 
++typedef struct {
++  size_t length;
++  size_t input_count;
++  size_t output_cout;
++  char* binary;
++} TfLiteVsiNpuParams;
++
+ typedef struct {
+   bool exclusive;
+   bool reverse;
+diff --git a/tensorflow/lite/kernels/BUILD b/tensorflow/lite/kernels/BUILD
+index 27608f618ed..1b8911d2ae7 100644
+--- a/tensorflow/lite/kernels/BUILD
++++ b/tensorflow/lite/kernels/BUILD
+@@ -567,6 +567,7 @@ BUILTIN_KERNEL_SRCS = [
+     "depthwise_conv.cc",
+     "dequantize.cc",
+     "detection_postprocess.cc",
++    "vsi_npu_precompiled.cc",
+     "div.cc",
+     "elementwise.cc",
+     "embedding_lookup.cc",
+diff --git a/tensorflow/lite/kernels/register.cc b/tensorflow/lite/kernels/register.cc
+index 3a7b7f25eec..ca24dfca36a 100644
+--- a/tensorflow/lite/kernels/register.cc
++++ b/tensorflow/lite/kernels/register.cc
+@@ -28,7 +28,7 @@ TfLiteRegistration* Register_NUMERIC_VERIFY();
+ TfLiteRegistration* Register_AUDIO_SPECTROGRAM();
+ TfLiteRegistration* Register_MFCC();
+ TfLiteRegistration* Register_DETECTION_POSTPROCESS();
+-
++TfLiteRegistration* Register_VSI_NPU_PRECOMPILED();
+ }  // namespace custom
+ 
+ namespace builtin {
+@@ -328,6 +328,8 @@ BuiltinOpResolver::BuiltinOpResolver() {
+             tflite::ops::custom::Register_AUDIO_SPECTROGRAM());
+   AddCustom("TFLite_Detection_PostProcess",
+             tflite::ops::custom::Register_DETECTION_POSTPROCESS());
++  AddCustom("vsi-npu",
++            tflite::ops::custom::Register_VSI_NPU_PRECOMPILED());
+ }
+ 
+ OpResolver::TfLiteDelegatePtrVector BuiltinOpResolver::GetDelegates(
+diff --git a/tensorflow/lite/kernels/register_ref.cc b/tensorflow/lite/kernels/register_ref.cc
+index c092a6e6009..dd513751432 100644
+--- a/tensorflow/lite/kernels/register_ref.cc
++++ b/tensorflow/lite/kernels/register_ref.cc
+@@ -29,6 +29,7 @@ TfLiteRegistration* Register_NUMERIC_VERIFY_REF();
+ TfLiteRegistration* Register_AUDIO_SPECTROGRAM();
+ TfLiteRegistration* Register_MFCC();
+ TfLiteRegistration* Register_DETECTION_POSTPROCESS();
++TfLiteRegistration* Register_VSI_NPU_PRECOMPILED();
+ 
+ }  // namespace custom
+ 
+@@ -478,6 +479,8 @@ BuiltinRefOpResolver::BuiltinRefOpResolver() {
+             tflite::ops::custom::Register_AUDIO_SPECTROGRAM());
+   AddCustom("TFLite_Detection_PostProcess",
+             tflite::ops::custom::Register_DETECTION_POSTPROCESS());
++  AddCustom("vsi_npu",
++            tflite::ops::custom::Register_VSI_NPU_PRECOMPILED());
+ }
+ 
+ }  // namespace builtin
+diff --git a/tensorflow/lite/kernels/vsi_npu_precompiled.cc b/tensorflow/lite/kernels/vsi_npu_precompiled.cc
+new file mode 100644
+index 00000000000..e62fb4d93f8
+--- /dev/null
++++ b/tensorflow/lite/kernels/vsi_npu_precompiled.cc
+@@ -0,0 +1,73 @@
++/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
++
++Licensed under the Apache License, Version 2.0 (the "License");
++you may not use this file except in compliance with the License.
++You may obtain a copy of the License at
++
++    http://www.apache.org/licenses/LICENSE-2.0
++
++Unless required by applicable law or agreed to in writing, software
++distributed under the License is distributed on an "AS IS" BASIS,
++WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++See the License for the specific language governing permissions and
++limitations under the License.
++==============================================================================*/
++
++#include <math.h>
++#include <stddef.h>
++#include <stdint.h>
++
++#include <vector>
++
++#include "flatbuffers/flexbuffers.h"  // from @flatbuffers
++#include "tensorflow/lite/c/common.h"
++#include "tensorflow/lite/kernels/internal/optimized/optimized_ops.h"
++#include "tensorflow/lite/kernels/internal/reference/reference_ops.h"
++#include "tensorflow/lite/kernels/internal/spectrogram.h"
++#include "tensorflow/lite/kernels/internal/tensor.h"
++#include "tensorflow/lite/kernels/internal/tensor_ctypes.h"
++#include "tensorflow/lite/kernels/kernel_util.h"
++
++namespace tflite {
++namespace ops {
++namespace custom {
++namespace vsi_npu {
++
++void* Init(TfLiteContext* context, const char* buffer, size_t length) {
++  TfLiteVsiNpuParams* data = reinterpret_cast<TfLiteVsiNpuParams*>(
++      malloc(sizeof(TfLiteVsiNpuParams) + sizeof(char) * length));
++  data->length = length;
++  data->binary = reinterpret_cast<char*>(data) + sizeof(TfLiteVsiNpuParams);
++  memcpy(reinterpret_cast<char*>(data->binary), buffer, length);
++  return reinterpret_cast<void*>(data);
++}
++
++void Free(TfLiteContext* context, void* buffer) {
++  auto* data = reinterpret_cast<TfLiteVsiNpuParams*>(buffer);
++  delete data;
++}
++
++TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
++  auto* data =
++      reinterpret_cast<TfLiteVsiNpuParams*>(node->user_data);
++  data->input_count = NumInputs(node);
++  data->output_cout = NumOutputs(node);
++  return kTfLiteOk;
++}
++
++TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
++  return kTfLiteOk;
++}
++
++}  // namespace vsi_npu
++
++TfLiteRegistration* Register_VSI_NPU_PRECOMPILED() {
++  static TfLiteRegistration r = {
++      vsi_npu::Init, vsi_npu::Free,
++      vsi_npu::Prepare,vsi_npu::Eval};
++  return &r;
++}
++
++}  // namespace custom
++}  // namespace ops
++}  // namespace tflite
+-- 
+2.25.1
+
