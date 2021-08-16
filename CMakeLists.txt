@@ -22,7 +22,7 @@ include(FetchContent)
 FetchContent_Declare(
   tensorflow
   GIT_REPOSITORY https://github.com/tensorflow/tensorflow.git
-  GIT_TAG v2.5.0
+  GIT_TAG v2.6.0
 )
 FetchContent_GetProperties(tensorflow)
 if(NOT tensorflow_POPULATED)

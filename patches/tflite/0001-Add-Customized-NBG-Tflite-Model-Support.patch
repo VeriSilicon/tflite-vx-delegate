@@ -1,15 +1,23 @@
-From f684a7d13037eeb3acbdcbc05a94190bdfaffb38 Mon Sep 17 00:00:00 2001
+From 279e127a9241c70a1075d995bf52d5147de37f68 Mon Sep 17 00:00:00 2001
 From: "xiang.zhang" <xiang.zhang@verisilicon.com>
-Date: Fri, 13 Aug 2021 18:19:09 +0800
-Subject: [PATCH] Add Customized NBG Tflite Model Support
+Date: Mon, 16 Aug 2021 13:09:31 +0800
+Subject: [PATCH 1/1] Add custom NBG op support in tflite
 
 Signed-off-by: xiang.zhang <xiang.zhang@verisilicon.com>
+---
+ tensorflow/lite/c/builtin_op_data.h           |  7 ++
+ tensorflow/lite/kernels/BUILD                 |  1 +
+ tensorflow/lite/kernels/register.cc           |  4 +-
+ tensorflow/lite/kernels/register_ref.cc       |  3 +
+ .../lite/kernels/vsi_npu_precompiled.cc       | 73 +++++++++++++++++++
+ 5 files changed, 87 insertions(+), 1 deletion(-)
+ create mode 100644 tensorflow/lite/kernels/vsi_npu_precompiled.cc
 
 diff --git a/tensorflow/lite/c/builtin_op_data.h b/tensorflow/lite/c/builtin_op_data.h
-index a0167c3f307..de95a617c77 100644
+index ed5ac004cbd..8f57e255812 100644
 --- a/tensorflow/lite/c/builtin_op_data.h
 +++ b/tensorflow/lite/c/builtin_op_data.h
-@@ -480,6 +480,13 @@ typedef struct {
+@@ -482,6 +482,13 @@ typedef struct {
    int body_subgraph_index;
  } TfLiteWhileParams;
  
@@ -24,10 +32,10 @@ index a0167c3f307..de95a617c77 100644
    bool exclusive;
    bool reverse;
 diff --git a/tensorflow/lite/kernels/BUILD b/tensorflow/lite/kernels/BUILD
-index 27608f618ed..1b8911d2ae7 100644
+index aa2f1456c19..1aecd5984bc 100644
 --- a/tensorflow/lite/kernels/BUILD
 +++ b/tensorflow/lite/kernels/BUILD
-@@ -567,6 +567,7 @@ BUILTIN_KERNEL_SRCS = [
+@@ -571,6 +571,7 @@ BUILTIN_KERNEL_SRCS = [
      "depthwise_conv.cc",
      "dequantize.cc",
      "detection_postprocess.cc",
@@ -36,7 +44,7 @@ index 27608f618ed..1b8911d2ae7 100644
      "elementwise.cc",
      "embedding_lookup.cc",
 diff --git a/tensorflow/lite/kernels/register.cc b/tensorflow/lite/kernels/register.cc
-index 3a7b7f25eec..ca24dfca36a 100644
+index 3e0520f6903..810bf3aa393 100644
 --- a/tensorflow/lite/kernels/register.cc
 +++ b/tensorflow/lite/kernels/register.cc
 @@ -28,7 +28,7 @@ TfLiteRegistration* Register_NUMERIC_VERIFY();
@@ -48,17 +56,17 @@ index 3a7b7f25eec..ca24dfca36a 100644
  }  // namespace custom
  
  namespace builtin {
-@@ -328,6 +328,8 @@ BuiltinOpResolver::BuiltinOpResolver() {
+@@ -333,6 +333,8 @@ BuiltinOpResolver::BuiltinOpResolver() {
              tflite::ops::custom::Register_AUDIO_SPECTROGRAM());
    AddCustom("TFLite_Detection_PostProcess",
              tflite::ops::custom::Register_DETECTION_POSTPROCESS());
 +  AddCustom("vsi-npu",
 +            tflite::ops::custom::Register_VSI_NPU_PRECOMPILED());
- }
- 
- OpResolver::TfLiteDelegatePtrVector BuiltinOpResolver::GetDelegates(
+   // By definition, all of the ops added above are not user-defined ops,
+   // since they are supported by BuiltinOpResolver.
+   may_directly_contain_user_defined_ops_ = false;
 diff --git a/tensorflow/lite/kernels/register_ref.cc b/tensorflow/lite/kernels/register_ref.cc
-index c092a6e6009..dd513751432 100644
+index 2a91442d352..f8924929977 100644
 --- a/tensorflow/lite/kernels/register_ref.cc
 +++ b/tensorflow/lite/kernels/register_ref.cc
 @@ -29,6 +29,7 @@ TfLiteRegistration* Register_NUMERIC_VERIFY_REF();
@@ -69,7 +77,7 @@ index c092a6e6009..dd513751432 100644
  
  }  // namespace custom
  
-@@ -478,6 +479,8 @@ BuiltinRefOpResolver::BuiltinRefOpResolver() {
+@@ -483,6 +484,8 @@ BuiltinRefOpResolver::BuiltinRefOpResolver() {
              tflite::ops::custom::Register_AUDIO_SPECTROGRAM());
    AddCustom("TFLite_Detection_PostProcess",
              tflite::ops::custom::Register_DETECTION_POSTPROCESS());
