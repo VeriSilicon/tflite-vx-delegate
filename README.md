@@ -28,7 +28,14 @@ mkdir build && cd build
 cmake ..
 make vx_delegate -j4
 ```
+If you would like to build using local version of tensorflow, you can use `FETCHCONTENT_SOURCE_DIR_TENSORFLOW` cmake variable. Point this variable to your tensorflow tree. For additional details on this variable please see the [official cmake documentation](https://cmake.org/cmake/help/latest/module/FetchContent.html#command:fetchcontent_populate)
 
+``` sh
+cmake -DFETCHCONTENT_SOURCE_DIR_TENSORFLOW=/my/copy/of/tensorflow \
+    -DOTHER_CMAKE_DEFINES...\
+    ..
+```
+After cmake execution completes, build and run as usual. Beware that cmake process will apply a patch to your tensorflow tree. The patch is requred to enable the external delegate support and the NBG support.
 
 # Examples
 examples/python/label_image.py

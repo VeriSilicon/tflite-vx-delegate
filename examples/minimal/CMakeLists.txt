@@ -24,7 +24,7 @@ set(TENSORFLOW_SOURCE_DIR "" CACHE PATH
 )
 if(NOT TENSORFLOW_SOURCE_DIR)
   get_filename_component(TENSORFLOW_SOURCE_DIR
-    "${CMAKE_CURRENT_LIST_DIR}/../../../../"
+    ${tensorflow_SOURCE_DIR}
     ABSOLUTE
   )
 endif()
@@ -34,7 +34,6 @@ include_directories(${TFLITE_SOURCE_DIR}/delegates/external)
 set(CMAKE_CXX_STANDARD 11)
 add_executable(minimal
   minimal.cc
-  ${TFLITE_SOURCE_DIR}/delegates/external/external_delegate.cc
 )
 target_link_libraries(minimal
   tensorflow-lite
