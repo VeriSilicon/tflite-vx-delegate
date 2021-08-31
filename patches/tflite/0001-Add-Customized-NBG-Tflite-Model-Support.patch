@@ -1,38 +1,84 @@
-From 279e127a9241c70a1075d995bf52d5147de37f68 Mon Sep 17 00:00:00 2001
+From ac8202c81c82fec3520baaf18ca613a0e9359a7e Mon Sep 17 00:00:00 2001
 From: "xiang.zhang" <xiang.zhang@verisilicon.com>
 Date: Mon, 16 Aug 2021 13:09:31 +0800
-Subject: [PATCH 1/1] Add custom NBG op support in tflite
+Subject: [PATCH] Add custom NBG op support in tflite
 
 Signed-off-by: xiang.zhang <xiang.zhang@verisilicon.com>
 ---
- tensorflow/lite/c/builtin_op_data.h           |  7 ++
- tensorflow/lite/kernels/BUILD                 |  1 +
- tensorflow/lite/kernels/register.cc           |  4 +-
- tensorflow/lite/kernels/register_ref.cc       |  3 +
- .../lite/kernels/vsi_npu_precompiled.cc       | 73 +++++++++++++++++++
- 5 files changed, 87 insertions(+), 1 deletion(-)
+ tensorflow/lite/CMakeLists.txt                 | 13 +++++
+ tensorflow/lite/c/builtin_op_data.h            |  7 +++
+ tensorflow/lite/kernels/BUILD                  |  1 +
+ tensorflow/lite/kernels/register.cc            |  4 +-
+ tensorflow/lite/kernels/register_ref.cc        |  3 ++
+ tensorflow/lite/kernels/vsi_npu_precompiled.cc | 73 ++++++++++++++++++++++++++
+ 6 files changed, 100 insertions(+), 1 deletion(-)
  create mode 100644 tensorflow/lite/kernels/vsi_npu_precompiled.cc
 
+diff --git a/tensorflow/lite/CMakeLists.txt b/tensorflow/lite/CMakeLists.txt
+index f5cc9b9..ca53ce2 100644
+--- a/tensorflow/lite/CMakeLists.txt
++++ b/tensorflow/lite/CMakeLists.txt
+@@ -67,6 +67,7 @@ cmake_dependent_option(TFLITE_ENABLE_NNAPI_VERBOSE_VALIDATION "Enable NNAPI verb
+ option(TFLITE_ENABLE_MMAP "Enable MMAP (unsupported on Windows)" ON)
+ option(TFLITE_ENABLE_GPU "Enable GPU" OFF)
+ option(TFLITE_ENABLE_XNNPACK "Enable XNNPACK backend" ON)
++option(TFLITE_ENABLE_EXTERNAL_DELEGATE "Enable external delegate" ON)
+ 
+ option(TFLITE_KERNEL_TEST "Enable tflite kernel unit test" OFF)
+ 
+@@ -314,6 +315,16 @@ else()
+     "${TFLITE_SOURCE_DIR}/nnapi/nnapi_implementation_disabled.cc"
+   )
+ endif()
++if(TFLITE_ENABLE_EXTERNAL_DELEGATE)
++   populate_tflite_source_vars("delegates/external"
++    TFLITE_DELEGATES_EXTERNAL_SRCS
++    FILTER "(_test_list|_disabled)\\.(cc|h)$"
++   )
++   list(APPEND TFLITE_DELEGATES_EXTERNAL_SRCS
++     ${TFLITE_SOURCE_DIR}/tools/command_line_flags.cc
++   )
++   set(TFLITE_DELEGATES_EXTERNAL_INCL "delegates/external")
++endif()
+ if(TFLITE_ENABLE_XNNPACK)
+   find_package(fp16_headers REQUIRED)
+   find_package(xnnpack REQUIRED)
+@@ -378,6 +389,7 @@ endif()
+ set(TFLITE_INCLUDE_DIRS
+   "${TENSORFLOW_SOURCE_DIR}"
+   "${TFLITE_FLATBUFFERS_SCHEMA_DIR}"
++  "${TFLITE_DELEGATES_EXTERNAL_INCL}"
+ )
+ include_directories(
+   BEFORE
+@@ -389,6 +401,7 @@ add_library(tensorflow-lite
+   ${TFLITE_CORE_API_SRCS}
+   ${TFLITE_CORE_SRCS}
+   ${TFLITE_C_SRCS}
++  ${TFLITE_DELEGATES_EXTERNAL_SRCS}
+   ${TFLITE_DELEGATES_FLEX_SRCS}
+   ${TFLITE_DELEGATES_GPU_SRCS}
+   ${TFLITE_DELEGATES_NNAPI_SRCS}
 diff --git a/tensorflow/lite/c/builtin_op_data.h b/tensorflow/lite/c/builtin_op_data.h
-index ed5ac004cbd..8f57e255812 100644
+index ed5ac00..8f57e25 100644
 --- a/tensorflow/lite/c/builtin_op_data.h
 +++ b/tensorflow/lite/c/builtin_op_data.h
-@@ -482,6 +482,13 @@ typedef struct {
-   int body_subgraph_index;
+@@ -483,6 +483,13 @@ typedef struct {
  } TfLiteWhileParams;
  
-+typedef struct {
+ typedef struct {
 +  size_t length;
 +  size_t input_count;
 +  size_t output_cout;
 +  char* binary;
 +} TfLiteVsiNpuParams;
 +
- typedef struct {
++typedef struct {
    bool exclusive;
    bool reverse;
+ } TfLiteCumsumParams;
 diff --git a/tensorflow/lite/kernels/BUILD b/tensorflow/lite/kernels/BUILD
-index aa2f1456c19..1aecd5984bc 100644
+index aa2f145..1aecd59 100644
 --- a/tensorflow/lite/kernels/BUILD
 +++ b/tensorflow/lite/kernels/BUILD
 @@ -571,6 +571,7 @@ BUILTIN_KERNEL_SRCS = [
@@ -44,7 +90,7 @@ index aa2f1456c19..1aecd5984bc 100644
      "elementwise.cc",
      "embedding_lookup.cc",
 diff --git a/tensorflow/lite/kernels/register.cc b/tensorflow/lite/kernels/register.cc
-index 3e0520f6903..810bf3aa393 100644
+index 3e0520f..810bf3a 100644
 --- a/tensorflow/lite/kernels/register.cc
 +++ b/tensorflow/lite/kernels/register.cc
 @@ -28,7 +28,7 @@ TfLiteRegistration* Register_NUMERIC_VERIFY();
@@ -66,7 +112,7 @@ index 3e0520f6903..810bf3aa393 100644
    // since they are supported by BuiltinOpResolver.
    may_directly_contain_user_defined_ops_ = false;
 diff --git a/tensorflow/lite/kernels/register_ref.cc b/tensorflow/lite/kernels/register_ref.cc
-index 2a91442d352..f8924929977 100644
+index 2a91442..f892492 100644
 --- a/tensorflow/lite/kernels/register_ref.cc
 +++ b/tensorflow/lite/kernels/register_ref.cc
 @@ -29,6 +29,7 @@ TfLiteRegistration* Register_NUMERIC_VERIFY_REF();
@@ -88,7 +134,7 @@ index 2a91442d352..f8924929977 100644
  }  // namespace builtin
 diff --git a/tensorflow/lite/kernels/vsi_npu_precompiled.cc b/tensorflow/lite/kernels/vsi_npu_precompiled.cc
 new file mode 100644
-index 00000000000..e62fb4d93f8
+index 0000000..e62fb4d
 --- /dev/null
 +++ b/tensorflow/lite/kernels/vsi_npu_precompiled.cc
 @@ -0,0 +1,73 @@
@@ -166,5 +212,5 @@ index 00000000000..e62fb4d93f8
 +}  // namespace ops
 +}  // namespace tflite
 -- 
-2.25.1
+2.7.4
 

@@ -29,14 +29,27 @@ if(NOT tensorflow_POPULATED)
   FetchContent_Populate(tensorflow)
 endif()
 
-include(cmake/tflite.cmake)
+# TODO(sven) this make build slow/stuck if modify cmake files after build
+if (EXISTS ${tensorflow_SOURCE_DIR}/tensorflow/lite/kernels/vsi_npu_precompiled.cc)
+  message("Patch already applied to " ${tensorflow_SOURCE_DIR})
+else()
+  message("Apply tensorflow lite patches ...")
+  execute_process(
+    COMMAND git apply ${PROJECT_SOURCE_DIR}/patches/tflite/0001-Add-Customized-NBG-Tflite-Model-Support.patch
+    TIMEOUT 2
+    WORKING_DIRECTORY  ${tensorflow_SOURCE_DIR}
+  )
+endif()
+
+add_subdirectory("${tensorflow_SOURCE_DIR}/tensorflow/lite"
+  "${tensorflow_BINARY_DIR}")
 
 list(APPEND VX_DELEGATE_DEPENDENCIES tensorflow-lite)
 list(APPEND VX_DELEGATES_SRCS
-  ${CMAKE_SOURCE_DIR}/delegate_main.cc
-  ${CMAKE_SOURCE_DIR}/op_map.cc
-  ${CMAKE_SOURCE_DIR}/utils.cc
-  ${CMAKE_SOURCE_DIR}/vx_delegate_adaptor.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/delegate_main.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/op_map.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/utils.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/vx_delegate_adaptor.cc
 )
 
 if((NOT DEFINED EXTERNAL_VIV_SDK) AND (NOT DEFINED TIM_VX_INSTALL))
