@@ -39,3 +39,9 @@ target_link_libraries(minimal
   tensorflow-lite
   ${CMAKE_DL_LIBS}
 )
+
+if(ANDROID_TOOLCHAIN)
+  target_link_libraries(minimal
+    log
+  )
+endif()
