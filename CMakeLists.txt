@@ -18,6 +18,7 @@ project(tflite_vx_delegate)
 
 OPTION(ENABLE_NBG_SUPPORT "enable customized nbg op in tflite" ON)
 
+set(CMAKE_CXX_STANDARD 14)
 if(ANDROID_TOOLCHAIN)
 # bypass warning as error since tensorflow lite can not pass with android ndk r22b
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error -Wno-c++11-narrowing")
@@ -57,7 +58,7 @@ list(APPEND VX_DELEGATES_SRCS
   ${CMAKE_CURRENT_SOURCE_DIR}/vx_delegate_adaptor.cc
 )
 
-if((NOT DEFINED EXTERNAL_VIV_SDK) AND (NOT DEFINED TIM_VX_INSTALL))
+if((NOT DEFINED TIM_VX_INSTALL))
   FetchContent_Declare(
   tim-vx
   GIT_REPOSITORY https://github.com/VeriSilicon/TIM-VX.git

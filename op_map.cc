@@ -1447,7 +1447,7 @@ struct ReduceOpMapper : public OpMapperBase<TfLiteReducerParams> {
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
                    const void* params) override {
-    TFLITE_LOG(INFO) << "Create reduce" << name_ << "op";
+    TFLITE_LOG(INFO) << "Create reduce_" << name_ << " op";
     const auto builtin = reinterpret_cast<const TfLiteReducerParams*>(params);
     auto keep_dims = builtin->keep_dims;
 
@@ -1786,8 +1786,9 @@ static const std::map<int, createIOpMapItemFunc> reg = {
         kTfLiteBuiltinReluN1To1, SimpleOpMapper<tim::vx::ops::Relu1>, "Relu1"),
     REGISTER_OP_MAPPER(
         kTfLiteBuiltinRelu6, SimpleOpMapper<tim::vx::ops::Relu6>, "Relu6"),
-    REGISTER_OP_MAPPER(
-        kTfLiteBuiltinLogistic, SimpleOpMapper<tim::vx::ops::Sigmoid>, "Sigmoid"),
+    REGISTER_OP_MAPPER(kTfLiteBuiltinLogistic,
+                       SimpleOpMapper<tim::vx::ops::Sigmoid>,
+                       "Sigmoid"),
     REGISTER_OP_MAPPER(kTfLiteBuiltinTranspose, Transpose),
     REGISTER_OP_MAPPER(
         kTfLiteBuiltinNeg, SimpleOpMapper<tim::vx::ops::Neg>, "Neg"),
@@ -1800,6 +1801,8 @@ static const std::map<int, createIOpMapItemFunc> reg = {
     REGISTER_OP_MAPPER(kTfLiteBuiltinReduceMin,
                        ReduceOpMapper<tim::vx::ops::ReduceMin>,
                        "Min"),
+    REGISTER_OP_MAPPER(
+        kTfLiteBuiltinSum, ReduceOpMapper<tim::vx::ops::ReduceSum>, "Sum"),
     REGISTER_OP_MAPPER(kTfLiteBuiltinReduceMax,
                        ReduceOpMapper<tim::vx::ops::ReduceMax>,
                        "Max"),
