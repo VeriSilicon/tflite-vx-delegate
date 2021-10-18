@@ -19,6 +19,7 @@ limitations under the License.
 #include <numeric>
 #include <thread>
 #include <chrono>
+#include <map>
 #include "tensorflow/lite/interpreter.h"
 #include "tensorflow/lite/kernels/register.h"
 #include "tensorflow/lite/model.h"
@@ -45,6 +46,11 @@ limitations under the License.
 template <typename T>
 std::vector<T> read_data(const char * filename, size_t required)
 {
+    static std::map<std::string, std::vector<T>> cached_data;
+
+    if (cached_data.find(filename) != cached_data.end()) {
+      return cached_data[filename];
+    }
     // open the file:
     std::ifstream file(filename, std::ios::binary);
 
@@ -61,6 +67,8 @@ std::vector<T> read_data(const char * filename, size_t required)
     std::vector<T> ret;
     ret.reserve(required/sizeof(T));
     memcpy(ret.data(), vec.data(), required);
+
+    cached_data.insert(std::make_pair(std::string(filename), ret));
 
     return ret;
 }
@@ -251,12 +259,15 @@ int main(int argc, char* argv[]) {
 
           auto bytes = npu_interpreter->output_tensor(idx)->bytes;
           for (auto j = 0; j < bytes; ++j) {
-            if (std::abs(npu_out_buf[j] - cpu_out_buf[j]) > 2) {
+            int count = 0;
+            if (std::abs(npu_out_buf[j] - cpu_out_buf[j]) > 2 && count < 100) {
               std::cout << "[Result mismatch]: Output[" << idx
-                        << "], CPU vx NPU("
+                        << "], CPU vs NPU("
                         << static_cast<int32_t>(cpu_out_buf[j]) << ","
                         << static_cast<int32_t>(npu_out_buf[j]) << ")"
                         << std::endl;
+
+              count++ ;
             }
           }
 
