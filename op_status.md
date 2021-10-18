@@ -77,7 +77,7 @@ ExpandDims|yes
 Equal|yes
 NotEqual|yes
 Log|yes
-Sum|no
+Sum|yes
 Sqrt|yes
 Rsqrt|yes
 Shape|no
