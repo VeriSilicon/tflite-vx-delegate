@@ -23,10 +23,49 @@
 *****************************************************************************/
 
 #include "utils.h"
+#include "tensorflow/lite/minimal_logging.h"
+
+using namespace tflite;
 
 namespace vx {
 namespace delegate {
 namespace utils {
+
+// transpose channel_dim while doing transpose operation.
+int32_t TransposeChannelDim(const std::vector<uint32_t>& perm,
+                                   int32_t channel_dim) {
+  if (channel_dim < 0) {
+    TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "invalid channel_dim");
+    return -1;
+  }
+  for (uint32_t i = 0; i < perm.size(); i++) {
+    if (channel_dim == perm.at(i)) {
+      return i;
+    }
+  }
+  TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "Can't find channle_dim");
+  return -1;
+}
+
+// Convert the perm in TfLite to the perm in vx-delegate when transpose.
+std::vector<uint32_t> GetOvxTransposePerm(const std::vector<uint32_t>& perm) {
+  std::vector<uint32_t> perm_out(perm.rbegin(), perm.rend());
+  std::vector<uint32_t> perm_in, ovx_perm;
+  for (int i = perm.size() - 1; i >= 0; i--) {
+    perm_in.push_back(i);
+  }
+  for (auto o : perm_out) {
+    for (int i = 0; i < perm_in.size(); i++) {
+      if (o == perm_in[i]) {
+        ovx_perm.push_back(i);
+        break;
+      }
+    }
+  }
+
+  return ovx_perm;
+}
+
 
 void GenerateWeightsDataForBilinear(float* data,
                                     const std::vector<uint32_t>& weight_shape,
