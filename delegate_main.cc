@@ -33,13 +33,14 @@
 
 #include "op_map.h"
 #include "utils.h"
-#include "tensorflow/lite/tools/logging.h"
+#include "tensorflow/lite/minimal_logging.h"
 #include "tensorflow/lite/context_util.h"
 #include "tensorflow/lite/kernels/internal/reference/reference_ops.h"
 #include "tensorflow/lite/kernels/internal/tensor_ctypes.h"
 #include "tensorflow/lite/kernels/internal/types.h"
 #include "tim/transform/layout_inference.h"
 
+using namespace tflite;
 namespace {
 
 TfLiteRegistration DelegateNodeRegistration() {
@@ -114,8 +115,7 @@ TfLiteStatus CopyFromBufferHandle(TfLiteContext* context,
                                   TfLiteBufferHandle buffer_handle,
                                   TfLiteTensor* tensor) {
   // Copies the data from delegate buffer into the tensor raw memory.
-  TFLITE_LOG(INFO) << "CopyFromBufferHandle handle:" << buffer_handle
-            << " tensor:" << tensor->name;
+  TFLITE_LOG(TFLITE_LOG_INFO, "CopyFromBufferHandle handle: %d , name: %s",  buffer_handle, tensor->name);
   return kTfLiteOk;
 }
 
@@ -123,7 +123,7 @@ void FreeBufferHandle(TfLiteContext* context,
                       TfLiteDelegate* delegate,
                       TfLiteBufferHandle* handle) {
   // Do any cleanups.
-  TFLITE_LOG(INFO) << "FreeBufferHandle handle:" << *handle;
+  TFLITE_LOG(TFLITE_LOG_INFO, "FreeBufferHandle handle: %d", *handle);
 }
 
 std::vector<uint32_t> TfLiteTensorDims(const TfLiteTensor* tensor) {
@@ -151,7 +151,7 @@ tim::vx::DataType TfLiteDtypeToVsiDtype(TfLiteType type) {
     case kTfLiteFloat16:
       return tim::vx::DataType::FLOAT16;
     default:
-      TFLITE_LOG(ERROR) << "Unsuppoted type:" << type;
+      TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "Unsuppoted type: %d", type);
       break;
   }
 
@@ -274,7 +274,7 @@ bool TransposeTensorData(const TfLiteTensor* tensor,
           reinterpret_cast<int8_t*>(data_out.data()));
       break;
     default:
-      TFLITE_LOG(ERROR) << "Unsupported type: " << tensor->type;
+      TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "Unsupported type: %d", tensor->type);
       return false;
   }
 
@@ -367,8 +367,7 @@ bool Delegate::SupportedOp(TfLiteContext* context,
     return it->second->IsSupported(context, node, registration);
   }
 
-  TFLITE_LOG(ERROR) << "Fallback unsupported op " << registration->builtin_code
-             << " to TfLite";
+  TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "Fallback unsupported op %d to TfLite", registration->builtin_code);
 
   return false;
 }
@@ -387,7 +386,7 @@ TfLiteDelegate* Delegate::Create() {
 
 std::unique_ptr<vx::delegate::OpData> Delegate::Init(
     TfLiteContext* context, const TfLiteDelegateParams* params) {
-  TFLITE_LOG(INFO) << "vx_delegate Delegate::Init";
+  TFLITE_LOG(TFLITE_LOG_INFO, "vx_delegate Delegate::Init");
 
   compiled_ = false;
   tensors_.resize(context->tensors_size + 1 /* for placeholder*/);
@@ -467,14 +466,14 @@ std::unique_ptr<vx::delegate::OpData> Delegate::Init(
 TfLiteStatus Delegate::Prepare(const OpData& op_data,
                                TfLiteContext* context,
                                TfLiteNode* node) {
-  TFLITE_LOG(INFO) << "Delegate::Prepare node:" << node->user_data;
+  TFLITE_LOG(TFLITE_LOG_INFO, "Delegate::Prepare node: %p", node->user_data);
   return kTfLiteOk;
 }
 
 TfLiteStatus Delegate::Invoke(const OpData& op_data,
                               TfLiteContext* context,
                               TfLiteNode* node) {
-  TFLITE_LOG(INFO) << "Delegate::Invoke node:" << node->user_data;
+  TFLITE_LOG(TFLITE_LOG_INFO, "Delegate::Invoke node: %p", node->user_data);
   if (!compiled_) {
     // TODO(bo): Handling multi-thread use case
     context_ = tim::vx::Context::Create();
@@ -567,25 +566,25 @@ TfLiteStatus Delegate::Invoke(const OpData& op_data,
       }
     }
 
-    TFLITE_LOG(INFO) << "Verifying graph";
+    TFLITE_LOG(TFLITE_LOG_INFO, "Verifying graph");
     // Do layout inference and get a new graph(first) and a tensor map(second).
     layout_infered_ = tim::transform::LayoutInference(graph_, context_);
     compiled_ = layout_infered_.first->Compile();
     if (!compiled_) {
-      TFLITE_LOG(FATAL) << "Failed to verify graph";
+      TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "Failed to verify graph");
       return kTfLiteDelegateError;
     }
 
-    TFLITE_LOG(INFO) << "Verified graph";
+    TFLITE_LOG(TFLITE_LOG_INFO, "Verified graph");
   }
 
   // TODO(derekjchow): Return error if compilation failed.
   for (int tensor_idx : op_data.subgraph_inputs) {
     const TfLiteTensor& tf_tensor = context->tensors[tensor_idx];
-    TFLITE_LOG(INFO) << "Copying input " << tensor_idx << ":" << tf_tensor.name;
+    TFLITE_LOG(TFLITE_LOG_INFO, "Copying input %d: %s", tensor_idx, tf_tensor.name);
     auto src_input_tensor = tensors_[tensor_idx];
     if (!src_input_tensor.get()) {
-      TFLITE_LOG(FATAL) << "Failed to copy input tensor!";
+      TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "Failed to copy input tensor!");
     }
 
     const void* tensor_data =
@@ -595,17 +594,17 @@ TfLiteStatus Delegate::Invoke(const OpData& op_data,
     infered_input_tensor->CopyDataToTensor(const_cast<void*>(tensor_data));
   }
 
-  TFLITE_LOG(INFO) << "Invoking graph";
+  TFLITE_LOG(TFLITE_LOG_INFO, "Invoking graph");
   if (!layout_infered_.first->Run()) {
-    TFLITE_LOG(FATAL) << "Failed to run graph";
+    TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "Failed to run graph");
   }
 
   for (int tensor_idx : op_data.subgraph_outputs) {
     TfLiteTensor& tf_tensor = context->tensors[tensor_idx];
-    TFLITE_LOG(INFO) << "Copying output " << tensor_idx << ":" << tf_tensor.name;
+    TFLITE_LOG(TFLITE_LOG_INFO, "Copying output %d, %s", tensor_idx, tf_tensor.name);
     auto src_output_tensor = tensors_[tensor_idx];
     if (!src_output_tensor.get()) {
-      TFLITE_LOG(FATAL) << "Failed to copy output tensor!";
+      TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "Failed to copy output tensor!");
     }
 
     void* tensor_data = reinterpret_cast<void*>(tf_tensor.data.raw);
@@ -617,10 +616,10 @@ TfLiteStatus Delegate::Invoke(const OpData& op_data,
   // Copy output states to input states
   for (int tensor_idx : op_data.subgraph_states) {
     TfLiteTensor& tf_tensor = context->tensors[tensor_idx];
-    TFLITE_LOG(INFO) << "Copying state " << tensor_idx << ":" << tf_tensor.name;
+    TFLITE_LOG(TFLITE_LOG_INFO, "Copying state %d, %s", tensor_idx, tf_tensor.name);
     auto src_state_tensor = state_tensors_[tensor_idx];
     if (!src_state_tensor.get()) {
-      TFLITE_LOG(FATAL) << "Disaster!";
+      TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "Disaster!");
     }
 
     void* tensor_data = reinterpret_cast<void*>(tf_tensor.data.raw);

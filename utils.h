@@ -29,46 +29,17 @@
 #include <limits>
 #include <cmath>
 #include "delegate_main.h"
-#include "tensorflow/lite/tools/logging.h"
 
 namespace vx {
 namespace delegate {
 namespace utils {
 
 // transpose channel_dim while doing transpose operation.
-inline int32_t TransposeChannelDim(const std::vector<uint32_t>& perm,
-                                   int32_t channel_dim) {
-  if (channel_dim < 0) {
-    TFLITE_LOG(ERROR) << "invalid channel_dim";
-    return -1;
-  }
-  for (uint32_t i = 0; i < perm.size(); i++) {
-    if (channel_dim == perm.at(i)) {
-      return i;
-    }
-  }
-  TFLITE_LOG(ERROR) << "Can't find channle_dim";
-  return -1;
-}
+int32_t TransposeChannelDim(const std::vector<uint32_t>& perm,
+                            int32_t channel_dim);
 
 // Convert the perm in TfLite to the perm in vx-delegate when transpose.
-inline std::vector<uint32_t> GetOvxTransposePerm(const std::vector<uint32_t>& perm) {
-  std::vector<uint32_t> perm_out(perm.rbegin(), perm.rend());
-  std::vector<uint32_t> perm_in, ovx_perm;
-  for (int i = perm.size() - 1; i >= 0; i--) {
-    perm_in.push_back(i);
-  }
-  for (auto o : perm_out) {
-    for (int i = 0; i < perm_in.size(); i++) {
-      if (o == perm_in[i]) {
-        ovx_perm.push_back(i);
-        break;
-      }
-    }
-  }
-
-  return ovx_perm;
-}
+std::vector<uint32_t> GetOvxTransposePerm(const std::vector<uint32_t>& perm);
 
 // Convert TfLite axis to OpenVX kind.
 inline int32_t ConvertAxis(int32_t axisIn, uint32_t dimNum) {
@@ -78,7 +49,9 @@ inline int32_t ConvertAxis(int32_t axisIn, uint32_t dimNum) {
 template <typename T>
 std::vector<T> TransposeVec(const std::vector<T>& input,
                             const std::vector<int>& perm) {
-  assert(input.size() == perm.size());
+  if (input.size() != perm.size()) {
+    return std::vector<T>();
+  };
 
   std::vector<T> output(input.size());
   for (int i = 0; i < perm.size(); i++) {
