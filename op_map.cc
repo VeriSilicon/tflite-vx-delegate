@@ -1194,7 +1194,7 @@ struct Space2DepthMapper
     for (int i = 0; i < node->inputs->size; i++) {
       int input_index = node->inputs->data[i];
       if (context->tensors[input_index].type == kTfLiteInt32) {
-        TFLITE_LOG(TFLITE_LOG_ERROR, "Int32 input is not supported in Space2Depth");
+        TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "Int32 input is not supported in Space2Depth");
         return false;
       }
       if (context->tensors[input_index].type == kTfLiteInt64) {
