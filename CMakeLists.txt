@@ -35,20 +35,10 @@ if(NOT tensorflow_POPULATED)
   FetchContent_Populate(tensorflow)
 endif()
 
-# TODO(sven) this make build slow/stuck if modify cmake files after build
-if (EXISTS ${tensorflow_SOURCE_DIR}/tensorflow/lite/kernels/vsi_npu_precompiled.cc)
-  message("Patch already applied to " ${tensorflow_SOURCE_DIR})
-else()
-  message("Apply tensorflow lite patches ...")
-  execute_process(
-    COMMAND git apply ${PROJECT_SOURCE_DIR}/patches/tflite/0001-Add-Customized-NBG-Tflite-Model-Support.patch
-    TIMEOUT 2
-    WORKING_DIRECTORY  ${tensorflow_SOURCE_DIR}
-  )
-endif()
-
 add_subdirectory("${tensorflow_SOURCE_DIR}/tensorflow/lite"
   "${tensorflow_BINARY_DIR}")
+
+get_target_property(TFLITE_SOURCE_DIR tensorflow-lite SOURCE_DIR)
 
 list(APPEND VX_DELEGATE_DEPENDENCIES tensorflow-lite)
 list(APPEND VX_DELEGATES_SRCS
@@ -56,6 +46,12 @@ list(APPEND VX_DELEGATES_SRCS
   ${CMAKE_CURRENT_SOURCE_DIR}/op_map.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/utils.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/vx_delegate_adaptor.cc
+  ${TFLITE_SOURCE_DIR}/tools/command_line_flags.cc
+)
+
+list(APPEND VX_CUSTOM_OP_SRCS
+  ${CMAKE_CURRENT_SOURCE_DIR}/vsi_npu_custom_op.cc
+  ${TFLITE_SOURCE_DIR}/delegates/external/external_delegate.cc
 )
 
 if((NOT DEFINED TIM_VX_INSTALL))
@@ -84,5 +80,10 @@ list(APPEND VX_DELEGATE_DEPENDENCIES ${TIM_VX_INSTALL}/lib/libtim-vx.so)
 
 add_library(vx_delegate SHARED ${VX_DELEGATES_SRCS})
 target_link_libraries(vx_delegate ${VX_DELEGATE_DEPENDENCIES})
+
+add_library(vx_custom_op STATIC ${VX_CUSTOM_OP_SRCS})
+target_include_directories(vx_custom_op PUBLIC ${PROJECT_SOURCE_DIR})
+target_link_libraries(vx_custom_op tensorflow-lite)
+add_dependencies(vx_custom_op vx_delegate)
 
 add_subdirectory(examples/minimal)

@@ -26,6 +26,7 @@ limitations under the License.
 #include "tensorflow/lite/optional_debug_tools.h"
 
 #include "tensorflow/lite/delegates/external/external_delegate.h"
+#include "vsi_npu_custom_op.h"
 
 // This is an example that is minimal to read a model
 // from disk and perform inference. There is no data being loaded
@@ -174,6 +175,8 @@ int main(int argc, char* argv[]) {
   // which allocates memory for the Interpreter and does various set up
   // tasks so that the Interpreter can read the provided model.
   tflite::ops::builtin::BuiltinOpResolver resolver;
+  resolver.AddCustom(kNbgCustomOp, tflite::ops::custom::Register_VSI_NPU_PRECOMPILED());
+
   tflite::InterpreterBuilder builder(*model, resolver);
   std::unique_ptr<tflite::Interpreter> npu_interpreter;
   builder(&npu_interpreter);
