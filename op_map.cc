@@ -74,6 +74,7 @@
 #include "tim/vx/ops/deconv.h"
 #include "tim/vx/ops/stack.h"
 #include "tim/vx/ops/arg.h"
+#include "vsi_npu_custom_op.h"
 
 using namespace tflite;
 
