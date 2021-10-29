@@ -334,8 +334,7 @@ VxDelegateOptions VxDelegateOptionsDefault() {
 }
 
 TfLiteDelegate* VxDelegate() {
-  static TfLiteDelegate* delegate = vx::delegate::Delegate::Create();
-  return delegate;
+  return vx::delegate::Delegate::Create();
 }
 
 TfLiteDelegate* VxDelegateCreate(const VxDelegateOptions* options) {
