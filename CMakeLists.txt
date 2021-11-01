@@ -86,4 +86,7 @@ target_include_directories(vx_custom_op PUBLIC ${PROJECT_SOURCE_DIR})
 target_link_libraries(vx_custom_op tensorflow-lite)
 add_dependencies(vx_custom_op vx_delegate)
 
+set_target_properties(benchmark_model PROPERTIES INTERFACE_LINK_LIBRARIES vx_custom_op)
+set_target_properties(label_image PROPERTIES INTERFACE_LINK_LIBRARIES vx_custom_op)
+
 add_subdirectory(examples/minimal)
