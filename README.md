@@ -49,6 +49,9 @@ cmake -DFETCHCONTENT_SOURCE_DIR_TENSORFLOW=/my/copy/of/tensorflow \
 ```
 After cmake execution completes, build and run as usual. Beware that cmake process will apply a patch to your tensorflow tree. The patch is requred to enable the external delegate support and the NBG support.
 
+## benchmark_model/Label_image compatible with Tflite+NBG
+With our Acuity Toolkit, you can generate tflite file with compiled NBG(**N**etwork **B**inary **G**raph) as a custom operator. To support this special format, you should build benchmark_model/label_image from our delegate repo not use the offical one.
+
 ## Run
 ```sh
 # For default x86 build, you can find prebuilt sdk from tim-vx
