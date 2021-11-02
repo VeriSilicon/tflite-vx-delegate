@@ -14,6 +14,12 @@
 # limitations under the License.
 
 cmake_minimum_required(VERSION 3.16)
+if(NOT CMAKE_BUILD_TYPE)
+  message(STATUS "Setting build type to Release, for debug builds use"
+    "'-DCMAKE_BUILD_TYPE=Debug'.")
+  set(CMAKE_BUILD_TYPE "Release")
+endif()
+
 project(tflite_vx_delegate)
 
 OPTION(ENABLE_NBG_SUPPORT "enable customized nbg op in tflite" ON)
