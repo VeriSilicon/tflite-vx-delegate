@@ -33,10 +33,8 @@ FetchContent_Declare(
 FetchContent_GetProperties(tensorflow)
 if(NOT tensorflow_POPULATED)
   FetchContent_Populate(tensorflow)
+  add_subdirectory("${tensorflow_SOURCE_DIR}/tensorflow/lite" "${tensorflow_BINARY_DIR}")
 endif()
-
-add_subdirectory("${tensorflow_SOURCE_DIR}/tensorflow/lite"
-  "${tensorflow_BINARY_DIR}")
 
 get_target_property(TFLITE_SOURCE_DIR tensorflow-lite SOURCE_DIR)
 
@@ -77,6 +75,9 @@ endif()
 message("=== Building with TIM_VX_LIBRIRIES from ${TIM_VX_INSTALL} ===")
 include_directories(${TIM_VX_INSTALL}/include)
 list(APPEND VX_DELEGATE_DEPENDENCIES ${TIM_VX_INSTALL}/lib/libtim-vx.so)
+if(ANDROID_TOOLCHAIN)
+  list(APPEND VX_DELEGATE_DEPENDENCIES log)
+endif()
 
 add_library(vx_delegate SHARED ${VX_DELEGATES_SRCS})
 target_link_libraries(vx_delegate ${VX_DELEGATE_DEPENDENCIES})

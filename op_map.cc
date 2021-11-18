@@ -1714,7 +1714,7 @@ struct ArgOpMapper : public OpMapperBase<EmptyStructPlaceholder> {
       std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
       std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
       const void* params) {
-    TFLITE_LOG(TFLITE_LOG_INFO, "Creating Arg %s op", name_ );
+      TFLITE_LOG(TFLITE_LOG_INFO, "Creating Arg %s op", name_.c_str());
 
     auto axis_tensor = inputs[1];
     std::vector<int> axis(axis_tensor->GetShape()[0]);
