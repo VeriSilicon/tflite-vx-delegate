@@ -85,7 +85,13 @@ endif()
 
 message("=== Building with TIM_VX_LIBRIRIES from ${TIM_VX_INSTALL} ===")
 include_directories(${TIM_VX_INSTALL}/include)
-list(APPEND VX_DELEGATE_DEPENDENCIES ${TIM_VX_INSTALL}/lib/libtim-vx.so)
+
+set(LIBDIR lib)
+if(CMAKE_SYSTEM_PROCESSOR STREQUAL aarch64)
+  set(LIBDIR lib64)
+endif()
+list(APPEND VX_DELEGATE_DEPENDENCIES ${TIM_VX_INSTALL}/${LIBDIR}/libtim-vx.so)
+
 if(ANDROID_TOOLCHAIN)
   list(APPEND VX_DELEGATE_DEPENDENCIES log)
 endif()
