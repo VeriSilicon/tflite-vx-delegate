@@ -35,18 +35,12 @@ if(ANDROID_TOOLCHAIN)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error -Wno-c++11-narrowing")
 endif()
 
-include(FetchContent)
-FetchContent_Declare(
-  tensorflow
-  GIT_REPOSITORY https://github.com/tensorflow/tensorflow.git
-  GIT_TAG v2.7.0
+set(CMAKE_MODULE_PATH
+  "${CMAKE_CURRENT_LIST_DIR}/cmake/modules"
+  ${CMAKE_MODULE_PATH}
 )
-FetchContent_GetProperties(tensorflow)
-if(NOT tensorflow_POPULATED)
-  FetchContent_Populate(tensorflow)
-  add_subdirectory("${tensorflow_SOURCE_DIR}/tensorflow/lite" "${tensorflow_BINARY_DIR}")
-endif()
 
+find_package(tensorflow REQUIRED)
 get_target_property(TFLITE_SOURCE_DIR tensorflow-lite SOURCE_DIR)
 
 list(APPEND VX_DELEGATE_DEPENDENCIES tensorflow-lite)
@@ -58,47 +52,19 @@ list(APPEND VX_DELEGATES_SRCS
   ${TFLITE_SOURCE_DIR}/tools/command_line_flags.cc
 )
 
+add_library(vx_delegate SHARED ${VX_DELEGATES_SRCS})
+
 list(APPEND VX_CUSTOM_OP_SRCS
   ${CMAKE_CURRENT_SOURCE_DIR}/vsi_npu_custom_op.cc
   ${TFLITE_SOURCE_DIR}/delegates/external/external_delegate.cc
 )
 
-if((NOT DEFINED TIM_VX_INSTALL))
-  FetchContent_Declare(
-  tim-vx
-  GIT_REPOSITORY https://github.com/VeriSilicon/TIM-VX.git
-  GIT_TAG main
-  )
-  FetchContent_GetProperties(tim-vx)
-  if(NOT tim-vx_POPULATED)
-    FetchContent_Populate(tim-vx)
-  endif()
-  set(EXTERNAL_VIV_SDK ${tim-vx_SOURCE_DIR}/prebuilt-sdk/x86_64_linux)
-  execute_process(COMMAND cmake . WORKING_DIRECTORY ${tim-vx_SOURCE_DIR})
-  execute_process(COMMAND make install -j8 WORKING_DIRECTORY ${tim-vx_SOURCE_DIR})
-  set(TIM_VX_INSTALL ${tim-vx_SOURCE_DIR}/install)
-endif()
-
-if(NOT TIM_VX_INSTALL OR NOT EXISTS ${TIM_VX_INSTALL})
-  message(FATAL_ERROR "Set TIM_VX_INSTALL to tim-vx install folder(by make install) instead of ${TIM_VX_INSTALL}")
-endif()
-
-message("=== Building with TIM_VX_LIBRIRIES from ${TIM_VX_INSTALL} ===")
-include_directories(${TIM_VX_INSTALL}/include)
-
-set(LIBDIR lib)
-if(CMAKE_SYSTEM_PROCESSOR STREQUAL aarch64)
-  set(LIBDIR lib64)
-endif()
-list(APPEND VX_DELEGATE_DEPENDENCIES ${TIM_VX_INSTALL}/${LIBDIR}/libtim-vx.so)
+find_package(tim-vx REQUIRED)
 
 if(ANDROID_TOOLCHAIN)
   list(APPEND VX_DELEGATE_DEPENDENCIES log)
 endif()
-
-add_library(vx_delegate SHARED ${VX_DELEGATES_SRCS})
 target_link_libraries(vx_delegate ${VX_DELEGATE_DEPENDENCIES})
-
 add_library(vx_custom_op STATIC ${VX_CUSTOM_OP_SRCS})
 target_include_directories(vx_custom_op PUBLIC ${PROJECT_SOURCE_DIR})
 target_link_libraries(vx_custom_op tensorflow-lite)
