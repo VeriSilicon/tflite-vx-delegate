@@ -44,10 +44,9 @@ limitations under the License.
     exit(1);                                                 \
   }
 
-template <typename T>
-std::vector<T> read_data(const char * filename, size_t required)
+std::vector<uint8_t> read_data(const char * filename, size_t required)
 {
-    static std::map<std::string, std::vector<T>> cached_data;
+    static std::map<std::string, std::vector<uint8_t>> cached_data;
 
     if (cached_data.find(filename) != cached_data.end()) {
       return cached_data[filename];
@@ -58,20 +57,16 @@ std::vector<T> read_data(const char * filename, size_t required)
     // Stop eating new lines in binary mode!!!
     file.unsetf(std::ios::skipws);
 
-    // reserve capacity
+    // reserve capacity not change size, memory copy in setInput will fail, so use resize()
     std::vector<uint8_t> vec;
-    vec.reserve(required);
+    vec.resize(required);
 
     // read the data:
     file.read(reinterpret_cast<char *>(vec.data()), required);
 
-    std::vector<T> ret;
-    ret.reserve(required/sizeof(T));
-    memcpy(ret.data(), vec.data(), required);
+    cached_data.insert(std::make_pair(std::string(filename), vec));
 
-    cached_data.insert(std::make_pair(std::string(filename), ret));
-
-    return ret;
+    return vec;
 }
 
 template< typename T>
@@ -132,14 +127,19 @@ void setupInput(int argc, char* argv[], const std::unique_ptr<tflite::Interprete
     switch (in_tensor->type) {
       case kTfLiteFloat32:
       {
-        auto in = read_data<float>(input_data, in_tensor->bytes);
-        memcpy(interpreter->typed_input_tensor<uint8_t>(input_idx), in.data(), sizeof(float)*in.size());
+        auto in = read_data(input_data, in_tensor->bytes);
+        memcpy(interpreter->typed_input_tensor<float>(input_idx), in.data(), sizeof(float)*in.size());
         break;
       }
       case kTfLiteUInt8:
-      case kTfLiteInt8: {
-        auto in = read_data<uint8_t>(input_data, in_tensor->bytes);
+      {
+        auto in = read_data(input_data, in_tensor->bytes);
         memcpy(interpreter->typed_input_tensor<uint8_t>(input_idx), in.data(), in.size());
+        break;
+      }
+      case kTfLiteInt8: {
+        auto in = read_data(input_data, in_tensor->bytes);
+        memcpy(interpreter->typed_input_tensor<int8_t>(input_idx), in.data(), in.size());
         break;
       }
       default: {
@@ -253,7 +253,40 @@ int main(int argc, char* argv[]) {
     for (auto idx = 0; idx < output_idx_list.size(); ++idx) {
       // std::vector<float> result;
       switch (npu_interpreter->output_tensor(idx)->type) {
-        // case kTfLiteInt8:
+        case kTfLiteInt8: {
+          auto npu_out_buf = npu_interpreter->typed_output_tensor<int8_t>(idx);
+          auto cpu_out_buf = cpu_interpreter->typed_output_tensor<int8_t>(idx);
+          TFLITE_MINIMAL_CHECK(npu_interpreter->output_tensor(idx)->bytes ==
+                               cpu_interpreter->output_tensor(idx)->bytes);
+
+          auto bytes = npu_interpreter->output_tensor(idx)->bytes;
+          for (auto j = 0; j < bytes; ++j) {
+            int count = 0;
+            if (std::abs(npu_out_buf[j] - cpu_out_buf[j]) > 2 && count < 100)
+             {
+              std::cout << "[Result mismatch]: Output[" << idx
+                        << "], CPU vs NPU("
+                        << static_cast<int32_t>(cpu_out_buf[j]) << ","
+                        << static_cast<int32_t>(npu_out_buf[j]) << ")"
+                        << std::endl;
+
+              count++ ;
+            }
+          }
+
+          std::vector<int8_t> lhs(bytes);
+          auto lquant =
+              npu_interpreter->tensor(output_idx_list[idx])->quantization;
+          std::vector<int8_t> rhs(bytes);
+
+          memcpy(lhs.data(), cpu_out_buf, bytes);
+          memcpy(rhs.data(), npu_out_buf, bytes);
+
+          std::cout << "CosineCosineSimilarity = " << cosine(lhs, rhs)
+                    << std::endl;
+
+          break;
+        }
         case kTfLiteUInt8: {
           auto npu_out_buf = npu_interpreter->typed_output_tensor<uint8_t>(idx);
           auto cpu_out_buf = cpu_interpreter->typed_output_tensor<uint8_t>(idx);
@@ -295,8 +328,9 @@ int main(int argc, char* argv[]) {
 
           auto bytes = npu_interpreter->output_tensor(idx)->bytes;
           for (auto j = 0; j < bytes / sizeof(float); ++j) {
-            if (std::abs(npu_out_buf[j] - cpu_out_buf[j]) >
-                0.001f) {  // TODO{sven}: not accurate
+            // if (std::abs(npu_out_buf[j] - cpu_out_buf[j]) >
+            //     0.001f)
+            {  // TODO{sven}: not accurate
               std::cout << "[Result mismatch]: Output[" << idx
                         << "], CPU vx NPU(" << cpu_out_buf[j] << ","
                         << npu_out_buf[j] << ")" << std::endl;
@@ -306,8 +340,8 @@ int main(int argc, char* argv[]) {
           std::vector<float> lhs(bytes / sizeof(float));
           std::vector<float> rhs(bytes / sizeof(float));
 
-          memcpy(lhs.data(), cpu_out_buf, bytes / sizeof(float));
-          memcpy(rhs.data(), npu_out_buf, bytes / sizeof(float));
+          memcpy(lhs.data(), cpu_out_buf, bytes);
+          memcpy(rhs.data(), npu_out_buf, bytes);
 
           std::cout << "CosineCosineSimilarity = " << cosine(lhs, rhs)
                     << std::endl;

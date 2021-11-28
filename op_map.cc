@@ -41,39 +41,7 @@
 #include "tensorflow/lite/kernels/internal/tensor_ctypes.h"
 #include "tensorflow/lite/kernels/internal/types.h"
 
-#include "tim/vx/ops/activations.h"
-#include "tim/vx/ops/addn.h"
-#include "tim/vx/ops/batch2space.h"
-#include "tim/vx/ops/concat.h"
-#include "tim/vx/ops/conv2d.h"
-#include "tim/vx/ops/depth2space.h"
-#include "tim/vx/ops/elementwise.h"
-#include "tim/vx/ops/fullyconnected.h"
-#include "tim/vx/ops/gather.h"
-#include "tim/vx/ops/gathernd.h"
-#include "tim/vx/ops/l2normalization.h"
-#include "tim/vx/ops/localresponsenormalization.h"
-#include "tim/vx/ops/logical.h"
-#include "tim/vx/ops/pad.h"
-#include "tim/vx/ops/pool2d.h"
-#include "tim/vx/ops/reduce.h"
-#include "tim/vx/ops/reshape.h"
-#include "tim/vx/ops/resize.h"
-#include "tim/vx/ops/reverse.h"
-#include "tim/vx/ops/select.h"
-#include "tim/vx/ops/simple_operations.h"
-#include "tim/vx/ops/slice.h"
-#include "tim/vx/ops/softmax.h"
-#include "tim/vx/ops/space2batch.h"
-#include "tim/vx/ops/space2depth.h"
-#include "tim/vx/ops/split.h"
-#include "tim/vx/ops/squeeze.h"
-#include "tim/vx/ops/stridedslice.h"
-#include "tim/vx/ops/transpose.h"
-#include "tim/vx/ops/nbg.h"
-#include "tim/vx/ops/deconv.h"
-#include "tim/vx/ops/stack.h"
-#include "tim/vx/ops/arg.h"
+#include "tim/vx/ops.h"
 #include "vsi_npu_custom_op.h"
 
 using namespace tflite;
@@ -416,7 +384,7 @@ struct SimpleOpMapper : public OpMapperBase<EmptyStructPlaceholder> {
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
                    const void* params) override {
-    TFLITE_LOG(TFLITE_LOG_INFO, "Creating %s op", name_.c_str()); 
+    TFLITE_LOG(TFLITE_LOG_INFO, "Creating %s op", name_.c_str());
 
     auto op = delegate->GetGraph()->CreateOperation<T_OperationType>();
     (*op).BindInputs(inputs).BindOutputs(outputs);
@@ -438,7 +406,7 @@ struct SimpleOpWithFusedActiovationMapper
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
                    const void* params) override {
-    TFLITE_LOG(TFLITE_LOG_INFO, "Creating %s op", name_.c_str()); 
+    TFLITE_LOG(TFLITE_LOG_INFO, "Creating %s op", name_.c_str());
 
     auto op = delegate->GetGraph()->CreateOperation<T_OperationType>();
     (*op).BindInputs(inputs).BindOutputs(outputs);
@@ -1324,6 +1292,26 @@ struct Transpose : public OpMapperBase<TfLiteTransposeParams> {
   }
 };
 
+struct BatchMatmul : public OpMapperBase<TfLiteBatchMatMulParams> {
+  bool HandleMapOp(vx::delegate::Delegate* delegate,
+                   std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
+                   std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
+                   const void* params) override {
+    TFLITE_LOG(TFLITE_LOG_INFO, "Create BatchMatmul op");
+    const auto builtin = reinterpret_cast<const TfLiteBatchMatMulParams*>(params);
+    bool adj_x = builtin -> adj_x;
+    bool adj_y = builtin -> adj_y;
+    auto op = delegate->GetGraph()->CreateOperation<tim::vx::ops::Matmul>(adj_x, adj_y);
+
+    (*op).BindInputs(inputs);
+    (*op).BindOutputs(outputs);
+
+    delegate->GetOps().push_back(std::move(op));
+
+    return true;
+  }
+};
+
 struct Gather : public OpMapperBase<TfLiteGatherParams> {
   bool HandleMapOp(vx::delegate::Delegate* delegate,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
@@ -1818,6 +1806,7 @@ static const std::map<int, createIOpMapItemFunc> reg = {
                        SimpleOpMapper<tim::vx::ops::Sigmoid>,
                        "Sigmoid"),
     REGISTER_OP_MAPPER(kTfLiteBuiltinTranspose, Transpose),
+    REGISTER_OP_MAPPER(kTfLiteBuiltinBatchMatmul, BatchMatmul),
     REGISTER_OP_MAPPER(
         kTfLiteBuiltinNeg, SimpleOpMapper<tim::vx::ops::Neg>, "Neg"),
     REGISTER_OP_MAPPER(
