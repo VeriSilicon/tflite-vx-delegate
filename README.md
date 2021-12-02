@@ -62,6 +62,13 @@ export LD_LIBRARY_PATH=${VIVANTE_SDK_DIR}/drivers:$LD_LIBRARY_PATH # the "driver
 ./benchmark_model --external_delegate_path=<patch_to_libvx_delegate.so> --graph=<tflite_model.tflite>
 ```
 
+## Test
+Introduced unit test with tensorflow keras api and convert it to tflite with quantized or none-quantized model,
+Golden generated from CPU implementation of tflite
+[Details for run test](./test/python/READMME.md)
+
+[Model verification script](./test/python/run_model.py) to compare NPU result with CPU result
+
 # Examples
 examples/python/label_image.py
 modified based on [offical label_image](https://github.com/tensorflow/tensorflow/blob/master/tensorflow/lite/examples/python/label_image.py)
