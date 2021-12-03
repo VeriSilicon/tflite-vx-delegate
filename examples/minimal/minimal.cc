@@ -128,7 +128,7 @@ void setupInput(int argc, char* argv[], const std::unique_ptr<tflite::Interprete
       case kTfLiteFloat32:
       {
         auto in = read_data(input_data, in_tensor->bytes);
-        memcpy(interpreter->typed_input_tensor<float>(input_idx), in.data(), sizeof(float)*in.size());
+        memcpy(interpreter->typed_input_tensor<float>(input_idx), in.data(), in.size());
         break;
       }
       case kTfLiteUInt8:
@@ -328,9 +328,8 @@ int main(int argc, char* argv[]) {
 
           auto bytes = npu_interpreter->output_tensor(idx)->bytes;
           for (auto j = 0; j < bytes / sizeof(float); ++j) {
-            // if (std::abs(npu_out_buf[j] - cpu_out_buf[j]) >
-            //     0.001f)
-            {  // TODO{sven}: not accurate
+            if (std::abs(npu_out_buf[j] - cpu_out_buf[j]) >
+                0.001f) {  // TODO{sven}: not accurate
               std::cout << "[Result mismatch]: Output[" << idx
                         << "], CPU vx NPU(" << cpu_out_buf[j] << ","
                         << npu_out_buf[j] << ")" << std::endl;
