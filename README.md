@@ -60,6 +60,10 @@ export VIVANTE_SDK_DIR=<direct_to_sdk_root>
 # Please copy libtim-vx.so to drivers/ directory
 export LD_LIBRARY_PATH=${VIVANTE_SDK_DIR}/drivers:$LD_LIBRARY_PATH # the "drivers" maybe named as lib
 ./benchmark_model --external_delegate_path=<patch_to_libvx_delegate.so> --graph=<tflite_model.tflite>
+# If you would like to use cache mode which save and load binary graph in local disk
+./benchmark_model --external_delegate_path=<patch_to_libvx_delegate.so> \
+                  --external_delegate_path='allowed_cache_mode:true;cache_file_path:<cache_file>' \
+                  --graph=<tflite_model.tflite>
 ```
 
 ## Test
@@ -80,5 +84,7 @@ examples/minimal
 modified based on [offical minimal](https://cs.opensource.google/tensorflow/tensorflow/+/master:tensorflow/lite/examples/minimal/)
 
 ```sh
-minimal libvx_delegate.so mobilenet_v2_1.0_224_quant.tflite
+minimal <patch_to_libvx_delegate.so> <tflite_model.tflite>
+# If you would like to use cache mode which save and load binary graph in local disk
+minimal <patch_to_libvx_delegate.so> <tflite_model.tflite> use_cache_mode <cache_file>
 ```
