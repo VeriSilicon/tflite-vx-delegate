@@ -82,3 +82,8 @@ modified based on [offical minimal](https://cs.opensource.google/tensorflow/tens
 ```sh
 minimal libvx_delegate.so mobilenet_v2_1.0_224_quant.tflite
 ```
+
+If you would like to use cache mode which save and load binary graph in local disk, add args "use_cache_mode" and cache file location 
+```sh
+minimal libvx_delegate.so mobilenet_v2_1.0_224_quant.tflite use_cache_mode cache_file
+```

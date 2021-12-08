@@ -33,6 +33,7 @@
 
 #include "tensorflow/lite/builtin_op_data.h"
 #include "tensorflow/lite/builtin_ops.h"
+#include "vsi_npu_custom_op.h"
 #include "tensorflow/lite/context.h"
 #include "tim/vx/context.h"
 #include "tim/vx/graph.h"
@@ -42,7 +43,22 @@
 namespace vx {
 namespace delegate {
 
-TfLiteDelegate* VxDelegate();
+typedef struct {
+  //Allowed save or load nbg binary
+  bool allowed_cache_mode;
+  //nbg binary path
+  std::string cache_file_path;
+  // Allowed ops to delegate.
+  int allowed_builtin_code;
+  // Report error during init.
+  bool error_during_init;
+  // Report error during prepare.
+  bool error_during_prepare;
+  // Report error during invoke.
+  bool error_during_invoke;
+} VxDelegateOptions;
+
+TfLiteDelegate* VxDelegate(const VxDelegateOptions* options);
 
 class Delegate;
 
@@ -54,17 +70,6 @@ struct OpData {
   std::unique_ptr<Delegate> delegate;
 };
 
-typedef struct {
-  // Allowed ops to delegate.
-  int allowed_builtin_code;
-  // Report error during init.
-  bool error_during_init;
-  // Report error during prepare.
-  bool error_during_prepare;
-  // Report error during invoke.
-  bool error_during_invoke;
-} VxDelegateOptions;
-
 VxDelegateOptions VxDelegateOptionsDefault();
 
 TfLiteDelegate* VxDelegateCreate(const VxDelegateOptions* options);
@@ -72,7 +77,13 @@ TfLiteDelegate* VxDelegateCreate(const VxDelegateOptions* options);
 void VxDelegateDelete(TfLiteDelegate* delegate);
 class Delegate {
  public:
-  static TfLiteDelegate* Create();
+  struct DerivedDelegateData {
+    TfLiteDelegate parent;
+    bool allow_cache_mode;
+    std::string cache_path;
+  };
+
+  static TfLiteDelegate* Create(const VxDelegateOptions* options);
   static bool SupportedOp(TfLiteContext* context,
                           TfLiteNode* node,
                           const TfLiteRegistration* registration);
@@ -88,6 +99,8 @@ class Delegate {
   TfLiteStatus Invoke(const OpData& op_data,
                       TfLiteContext* context,
                       TfLiteNode* node);
+  void CreateCacheOp(const OpData& op_data);
+
   std::vector<std::shared_ptr<tim::vx::Operation>>& GetOps() { return ops_; }
   std::shared_ptr<tim::vx::Graph>& GetGraph() { return graph_; }
   std::vector<std::shared_ptr<tim::vx::Tensor>>& GetTensors() {
@@ -115,6 +128,11 @@ class Delegate {
   std::vector<std::shared_ptr<tim::vx::Operation>> ops_;
   std::vector<OperationDataType> operations_;
   bool compiled_;
+
+  bool is_read_nbg_;
+  bool is_write_nbg_;
+  size_t nbg_size_;
+  FILE *file_;
 };
 
 }  // namespace delegate

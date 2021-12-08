@@ -23,6 +23,7 @@
 *****************************************************************************/
 #include <string>
 #include <vector>
+#include <string.h>
 
 #include "tensorflow/lite/c/common.h"
 #include "delegate_main.h"
@@ -54,12 +55,15 @@ TfLiteDelegate* CreateVxDelegateFromOptions(char** options_keys,
     argv.get()[i + 1] = option_args.rbegin()->c_str();
   }
 
+  constexpr char kAllowedSaveLoadNBG[] = "allowed_cache_mode";
   constexpr char kAllowedBuiltinOp[] = "allowed_builtin_code";
   constexpr char kReportErrorDuingInit[] = "error_during_init";
   constexpr char kReportErrorDuingPrepare[] = "error_during_prepare";
   constexpr char kReportErrorDuingInvoke[] = "error_during_invoke";
 
   std::vector<tflite::Flag> flag_list = {
+      tflite::Flag::CreateFlag(kAllowedSaveLoadNBG, &options.allowed_cache_mode,
+                               "Allowed save load nbg."),
       tflite::Flag::CreateFlag(kAllowedBuiltinOp, &options.allowed_builtin_code,
                                "Allowed builtin code."),
       tflite::Flag::CreateFlag(kReportErrorDuingInit,
@@ -78,6 +82,8 @@ TfLiteDelegate* CreateVxDelegateFromOptions(char** options_keys,
     return nullptr;
   }
 
+  TFLITE_LOG(INFO) << "Vx delegate: allowed_cache_mode set to "
+                   << options.allowed_cache_mode << ".";
   TFLITE_LOG(INFO) << "Vx delegate: allowed_builtin_code set to "
                    << options.allowed_builtin_code << ".";
   TFLITE_LOG(INFO) << "Vx delegate: error_during_init set to "
@@ -87,6 +93,14 @@ TfLiteDelegate* CreateVxDelegateFromOptions(char** options_keys,
   TFLITE_LOG(INFO) << "Vx delegate: error_during_invoke set to "
                    << options.error_during_invoke << ".";
 
+  if (options.allowed_cache_mode) {
+    for (int i = 0; i < num_options; ++i) {
+      if(strcmp(options_keys[i],"cache_file_path") == 0){
+        options.cache_file_path = options_values[i];
+        break;
+      }
+    }
+  }
   return VxDelegateCreate(&options);
 }
 
