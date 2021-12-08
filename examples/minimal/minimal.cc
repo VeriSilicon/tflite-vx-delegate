@@ -93,15 +93,22 @@ float cosine(const std::vector<T>& lhs, const std::vector<T>& rhs) {
   return element_sum/(lhs_m*rhs_m);
 }
 
-void setupInput(int argc, char* argv[], const std::unique_ptr<tflite::Interpreter>& interpreter) {
+void setupInput(int argc,
+                char* argv[],
+                const std::unique_ptr<tflite::Interpreter>& interpreter,
+                bool is_cache_mode) {
   auto input_list = interpreter->inputs();
   bool use_random_input = false;
-  if (input_list.size() != argc - 3) {
-    std::cout << "Warning: input count not match between command line and model -> generate random data for inputs" << std::endl;
+
+  if ((!is_cache_mode && input_list.size() != argc - 4) ||
+      (is_cache_mode && input_list.size() != argc - 6)) {
+    std::cout << "Warning: input count not match between command line and "
+                 "model -> generate random data for inputs"
+              << std::endl;
     use_random_input = true;
   }
-
-  uint32_t i = 3; // argv index
+  uint32_t i = is_cache_mode ? 6 : 4;
+  //uint32_t i = 4; // argv index
 
   for (auto input_idx = 0; input_idx < input_list.size(); input_idx++) {
     auto in_tensor = interpreter->input_tensor(input_idx);
@@ -155,12 +162,20 @@ void setupInput(int argc, char* argv[], const std::unique_ptr<tflite::Interprete
 
 int main(int argc, char* argv[]) {
   if (argc <= 2) {
-    fprintf(stderr, "minimal <external_delegate.so> <tflite model> <inputs>\n");
+    fprintf(stderr, "minimal <external_delegate.so> <tflite model> <use_cache_mode> <cache file> <inputs>\n");
     return 1;
   }
   const char* delegate_so = argv[1];
   const char* filename = argv[2];
-  // start from argv[3] to argv[N] is input tensor
+  bool is_use_cache_mode = false;
+  const char* cachename;
+  if(argc >= 5){
+    int is_match = std::strcmp(argv[3],"use_cache_mode");
+    if(is_match == 0){
+      is_use_cache_mode = true;
+      cachename = argv[4];
+    }
+  }
 
   // Load model
   std::unique_ptr<tflite::FlatBufferModel> model =
@@ -168,6 +183,15 @@ int main(int argc, char* argv[]) {
   TFLITE_MINIMAL_CHECK(model != nullptr);
 
   auto ext_delegate_option = TfLiteExternalDelegateOptionsDefault(argv[1]);
+  if(is_use_cache_mode){
+    const char* allow_cache_key = "allowed_cache_mode";
+    const char* allow_cache_value = "true";
+    const char* cache_file_key = "cache_file_path";
+    const char* cache_file_value = cachename;
+    ext_delegate_option.insert(&ext_delegate_option,allow_cache_key,allow_cache_value);
+    ext_delegate_option.insert(&ext_delegate_option,cache_file_key,cache_file_value);
+  }
+
   auto ext_delegate_ptr = TfLiteExternalDelegateCreate(&ext_delegate_option);
 
   // Build the interpreter with the InterpreterBuilder.
@@ -193,7 +217,7 @@ int main(int argc, char* argv[]) {
   // Note: The buffer of the input tensor with index `i` of type T can
   // be accessed with `T* input = interpreter->typed_input_tensor<T>(i);`
 
-  setupInput(argc, argv, npu_interpreter);
+  setupInput(argc, argv, npu_interpreter,is_use_cache_mode);
 
   // Run inference
   TFLITE_MINIMAL_CHECK(npu_interpreter->Invoke() == kTfLiteOk);
@@ -228,7 +252,7 @@ int main(int argc, char* argv[]) {
   // TODO(user): Insert code to fill input tensors.
   // Note: The buffer of the input tensor with index `i` of type T can
   // be accessed with `T* input = interpreter->typed_input_tensor<T>(i);`
-  setupInput(argc, argv, cpu_interpreter);
+  setupInput(argc, argv, cpu_interpreter,is_use_cache_mode);
 
   // Run inference
   TFLITE_MINIMAL_CHECK(cpu_interpreter->Invoke() == kTfLiteOk);

@@ -333,18 +333,18 @@ VxDelegateOptions VxDelegateOptionsDefault() {
   return options;
 }
 
-TfLiteDelegate* VxDelegate() {
-  return vx::delegate::Delegate::Create();
+TfLiteDelegate* VxDelegate(const VxDelegateOptions* options) {
+  return vx::delegate::Delegate::Create(options);
 }
 
 TfLiteDelegate* VxDelegateCreate(const VxDelegateOptions* options) {
-  return VxDelegate();
+  return VxDelegate(options);
 }
 
 void VxDelegateDelete(TfLiteDelegate* delegate) {
   if (delegate == nullptr) return;
-
-  delete delegate;
+  auto derivedDelegate = reinterpret_cast<DerivedDelegateData*>(delegate);
+  delete derivedDelegate;
   delegate = nullptr;
 }
 
@@ -371,21 +371,57 @@ bool Delegate::SupportedOp(TfLiteContext* context,
   return false;
 }
 
-TfLiteDelegate* Delegate::Create() {
-  TfLiteDelegate* delegate = new TfLiteDelegate();
+TfLiteDelegate* Delegate::Create(const VxDelegateOptions* options) {
+  DerivedDelegateData* delegate = new DerivedDelegateData();
+  std::memset(delegate, 0, sizeof(DerivedDelegateData));
 
-  std::memset(delegate, 0, sizeof(TfLiteDelegate));
-  delegate->flags = kTfLiteDelegateFlagsNone;
-  delegate->Prepare = &PrepareDelegate;
-  delegate->CopyFromBufferHandle = &CopyFromBufferHandle;
-  delegate->FreeBufferHandle = &FreeBufferHandle;
+  delegate->parent.flags = kTfLiteDelegateFlagsNone;
+  delegate->parent.Prepare = &PrepareDelegate;
+  delegate->parent.CopyFromBufferHandle = &CopyFromBufferHandle;
+  delegate->parent.FreeBufferHandle = &FreeBufferHandle;
 
-  return delegate;
+  delegate->allow_cache_mode = options->allowed_cache_mode;
+  if(delegate->allow_cache_mode){
+    delegate->cache_path = options->cache_file_path;
+  }
+  return reinterpret_cast<TfLiteDelegate*>(delegate);
+}
+
+void Delegate::CreateCacheOp(const OpData& op_data) {
+    operations_.resize(1);
+    auto& operation = operations_[0];
+
+    operation.custom_name = "vsi-npu";
+    std::copy(op_data.subgraph_inputs.begin(),
+              op_data.subgraph_inputs.end(),
+              std::back_inserter(operation.inputs));
+    std::copy(op_data.subgraph_outputs.begin(),
+              op_data.subgraph_outputs.end(),
+              std::back_inserter(operation.outputs));
+
+    operation.builtin_data.reserve(nbg_size_ + sizeof(TfLiteVsiNpuParams));
+    TfLiteVsiNpuParams* nbg_param =
+        reinterpret_cast<TfLiteVsiNpuParams*>(operation.builtin_data.data());
+    nbg_param->length = nbg_size_;
+    nbg_param->input_count = op_data.subgraph_inputs.size();
+    nbg_param->output_cout = op_data.subgraph_outputs.size();
+    nbg_param->binary = reinterpret_cast<char*>(operation.builtin_data.data()) +
+                        sizeof(TfLiteVsiNpuParams);
+    fs_.read(nbg_param->binary,nbg_size_);
 }
 
 std::unique_ptr<vx::delegate::OpData> Delegate::Init(
     TfLiteContext* context, const TfLiteDelegateParams* params) {
   TFLITE_LOG(TFLITE_LOG_INFO, "vx_delegate Delegate::Init");
+
+  nbg_size_ = 0;
+  auto derivedDelegate = reinterpret_cast<DerivedDelegateData*>(params->delegate);
+  if (derivedDelegate->allow_cache_mode){
+    fs_.open(derivedDelegate->cache_path.c_str(), std::ios::in | std::ios::ate);
+    is_cache_present_ = fs_ ? true : false;
+    nbg_size_ = fs_.tellg();
+    fs_.close();
+  }
 
   compiled_ = false;
   tensors_.resize(context->tensors_size + 1 /* for placeholder*/);
@@ -407,55 +443,70 @@ std::unique_ptr<vx::delegate::OpData> Delegate::Init(
             output_tensors.end(),
             std::back_inserter(op_data->subgraph_outputs));
 
-  const auto& supported_customs = vx::op_map::SupportedBuiltinCustomOps();
-  const auto& supported_builtins = vx::op_map::SupportedBuiltinOps();
-  operations_.resize(params->nodes_to_replace->size);
-  for (int i = 0; i < params->nodes_to_replace->size; i++) {
-    TfLiteNode* node;
-    TfLiteRegistration* reg;
-    int node_idx = params->nodes_to_replace->data[i];
-    context->GetNodeAndRegistration(context, node_idx, &node, &reg);
-    tflite::TfLiteIntArrayView inputs(node->inputs);
-    tflite::TfLiteIntArrayView outputs(node->outputs);
-
-    auto& operation = operations_[i];
-
-    if(reg->custom_name){
-      operation.custom_name = reg->custom_name;
+  if (is_cache_present_ && is_cache_present_.value()) {
+    fs_.open(derivedDelegate->cache_path.c_str(), std::ios::in);
+    Delegate::CreateCacheOp(*op_data);
+    fs_.close();
+  } else {
+    if (is_cache_present_ && !is_cache_present_.value()) {
+      fs_.open(derivedDelegate->cache_path.c_str(),
+               std::ios::in | std::ios::out | std::ios::app | std::ios::binary);
     }
-    operation.builtin_code = reg->builtin_code;
-    bool isbuiltinOp = operation.custom_name.empty();
-    std::copy(
-        inputs.begin(), inputs.end(), std::back_inserter(operation.inputs));
-    std::copy(
-        outputs.begin(), outputs.end(), std::back_inserter(operation.outputs));
+    const auto& supported_customs = vx::op_map::SupportedBuiltinCustomOps();
+    const auto& supported_builtins = vx::op_map::SupportedBuiltinOps();
+    operations_.resize(params->nodes_to_replace->size);
+    for (int i = 0; i < params->nodes_to_replace->size; i++) {
+      TfLiteNode* node;
+      TfLiteRegistration* reg;
+      int node_idx = params->nodes_to_replace->data[i];
+      context->GetNodeAndRegistration(context, node_idx, &node, &reg);
+      tflite::TfLiteIntArrayView inputs(node->inputs);
+      tflite::TfLiteIntArrayView outputs(node->outputs);
 
-    std::vector<int> states;
-    if ((isbuiltinOp && supported_builtins.at(reg->builtin_code)
-                ->GetStateTensorIndexes(context, node, reg, states) )|| (!isbuiltinOp &&
-        supported_customs.at(operation.custom_name)
-            ->GetStateTensorIndexes(context, node, reg, states))) {
+      auto& operation = operations_[i];
+
+      if (reg->custom_name) {
+        operation.custom_name = reg->custom_name;
+      }
+      operation.builtin_code = reg->builtin_code;
+      bool isbuiltinOp = operation.custom_name.empty();
       std::copy(
-          states.begin(), states.end(), std::back_inserter(operation.states));
+          inputs.begin(), inputs.end(), std::back_inserter(operation.inputs));
+      std::copy(outputs.begin(),
+                outputs.end(),
+                std::back_inserter(operation.outputs));
 
-      // record state tensor index
-      std::copy(states.begin(),
-                states.end(),
-                std::back_inserter(op_data->subgraph_states));
-    }
+      std::vector<int> states;
+      if ((isbuiltinOp &&
+           supported_builtins.at(reg->builtin_code)
+               ->GetStateTensorIndexes(context, node, reg, states)) ||
+          (!isbuiltinOp &&
+           supported_customs.at(operation.custom_name)
+               ->GetStateTensorIndexes(context, node, reg, states))) {
+        std::copy(
+            states.begin(), states.end(), std::back_inserter(operation.states));
 
-    if(!isbuiltinOp && node->user_data) {
-      operation.builtin_data.resize(supported_customs.at(operation.custom_name)->GetParamSize());
-      memcpy(operation.builtin_data.data(),
-             node->user_data,
-             operation.builtin_data.size());
-    }else if (isbuiltinOp && node->builtin_data) {
-      operation.builtin_data.resize(supported_builtins.at(reg->builtin_code)->GetParamSize());
-      memcpy(operation.builtin_data.data(),
-             node->builtin_data,
-             operation.builtin_data.size());
-    }else{
-      continue;
+        // record state tensor index
+        std::copy(states.begin(),
+                  states.end(),
+                  std::back_inserter(op_data->subgraph_states));
+      }
+
+      if (!isbuiltinOp && node->user_data) {
+        operation.builtin_data.resize(
+            supported_customs.at(operation.custom_name)->GetParamSize());
+        memcpy(operation.builtin_data.data(),
+               node->user_data,
+               operation.builtin_data.size());
+      } else if (isbuiltinOp && node->builtin_data) {
+        operation.builtin_data.resize(
+            supported_builtins.at(reg->builtin_code)->GetParamSize());
+        memcpy(operation.builtin_data.data(),
+               node->builtin_data,
+               operation.builtin_data.size());
+      } else {
+        continue;
+      }
     }
   }
 
@@ -568,13 +619,29 @@ TfLiteStatus Delegate::Invoke(const OpData& op_data,
     TFLITE_LOG(TFLITE_LOG_INFO, "Verifying graph");
     // Do layout inference and get a new graph(first) and a tensor map(second).
     layout_infered_ = tim::transform::LayoutInference(graph_, context_);
-    compiled_ = layout_infered_.first->Compile();
-    if (!compiled_) {
-      TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "Failed to verify graph");
-      return kTfLiteDelegateError;
+    if(is_cache_present_ && !is_cache_present_.value()){
+      nbg_size_ = -1;
+      compiled_ = layout_infered_.first->CompileToBinary(nullptr, &nbg_size_);
+      if (!compiled_) {
+        TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "compile to binary failed");
+        return kTfLiteDelegateError;
+        }
+        std::shared_ptr<char> nbg_buf(new char[nbg_size_]);
+        compiled_ = layout_infered_.first->CompileToBinary(nbg_buf.get(), &nbg_size_);
+        if (!compiled_) {
+          TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "compile to binary failed");
+          return kTfLiteDelegateError;
+        }
+        fs_.write(nbg_buf.get(),nbg_size_);
+        fs_.close();
+    } else {
+      compiled_ = layout_infered_.first->Compile();
+      if (!compiled_) {
+        TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "Failed to verify graph");
+        return kTfLiteDelegateError;
+      }
+      TFLITE_LOG(TFLITE_LOG_INFO, "Verified graph");
     }
-
-    TFLITE_LOG(TFLITE_LOG_INFO, "Verified graph");
   }
 
   // TODO(derekjchow): Return error if compilation failed.
