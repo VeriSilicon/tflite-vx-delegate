@@ -315,12 +315,11 @@ std::vector<std::shared_ptr<tim::vx::Tensor>> MapIndexesToTensors(
     const std::vector<std::shared_ptr<tim::vx::Tensor>>& tensors,
     const std::vector<int>& indexes) {
   std::vector<std::shared_ptr<tim::vx::Tensor>> out_tensors;
-  std::transform(indexes.begin(),
-                 indexes.end(),
-                 back_inserter(out_tensors),
-                 [tensors](const int& index) {
-                   return tensors[(index + tensors.size()) % tensors.size()];
-                 });
+  for (const auto& index : indexes) {
+    if (index != -1) {
+      out_tensors.push_back(tensors[(index + tensors.size()) % tensors.size()]);
+    }
+  }
   return out_tensors;
 }
 
