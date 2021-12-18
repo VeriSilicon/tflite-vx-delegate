@@ -56,9 +56,21 @@ class npu:
 
         out = []
         for o in self.output_details:
-            out.append(self.interpreter.get_tensor(o['index']))
+            out.append((o['name'], self.interpreter.get_tensor(o['index'])))
         return out
 
 
+def norm_ (List1):
+    r = 0
+    for i in List1:
+        r += float(i)*float(i)
+    return r
+def dot_(L1, L2):
+    r = 0
+    for (i, j) in zip(L1, L2):
+        r += float(i)*float(j)
+    return r
+
 def cosine_similarity(List1, List2):
-    return dot(List1, List2)/(norm(List1)*norm(List2))
+    return dot(List1, List2)/(0.00001+(norm(List1)*norm(List2)))
+    #return dot_(List1, List2)/(norm_(List1)*norm(List2))

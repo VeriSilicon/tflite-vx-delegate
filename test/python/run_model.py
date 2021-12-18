@@ -27,7 +27,7 @@ if __name__ == '__main__':
     idx = 0
     for (gold, npu) in zip(gold_output, npu_output):
         np.savetxt("/tmp/gold_{}".format(idx), gold.flatten())
-        np.savetxt("/tmp/npu_{}".format(idx), npu.flatten())
+        np.savetxt("/tmp/npu_{}".format(idx), npu[1].flatten())
 
-        print("[{}]cosine_similarity = ".format(idx), utils.cosine_similarity(gold.flatten(), npu.flatten()))
+        print("[{}]cosine_similarity = ".format(idx), utils.cosine_similarity(gold.flatten(), npu[1].flatten()))
         idx = idx + 1

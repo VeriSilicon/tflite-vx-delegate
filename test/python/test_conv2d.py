@@ -41,4 +41,4 @@ def test_conv2d(delegate_lib, batch_size, in_w, in_h, in_ch, out_ch, k_w, k_h, q
     npu_out = npu_.run(model_path, gold_in)
 
     for (g, n) in zip(gold_out, npu_out):
-        assert pytest.approx(g, n)
+        assert pytest.approx(g, n[1])
