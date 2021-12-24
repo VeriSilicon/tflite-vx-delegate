@@ -1591,6 +1591,62 @@ struct Slice : public OpMapperBase<EmptyStructPlaceholder> {
   }
 };
 
+struct SplitVMapper : public OpMapperBase<TfLiteSplitVParams> {
+  bool IsOpSupported(TfLiteContext* context,
+                     TfLiteNode* node,
+                     const TfLiteRegistration* registration) const override {
+    for (int i = 0; i < node->inputs->size; i++) {
+      int input_index = node->inputs->data[i];
+      if ((context->tensors[input_index].type == kTfLiteInt8 ||
+           context->tensors[input_index].type == kTfLiteUInt8) &&
+          context->tensors[input_index].quantization.type ==
+              kTfLiteNoQuantization) {
+        TFLITE_LOG_PROD(
+            TFLITE_LOG_ERROR,
+            "Int8 or uint8 input without quantization is not supported in "
+            "Split");
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  bool HandleMapOp(vx::delegate::Delegate* delegate,
+                   std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
+                   std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
+                   const void* params) override {
+    TFLITE_LOG(TFLITE_LOG_INFO, "Create SplitV op");
+
+    const auto builtin = reinterpret_cast<const TfLiteSplitVParams*>(params);
+    auto input_tensor = inputs[0];
+    auto slices_tensor = inputs[1];
+    auto axis_tensor = inputs[2];
+
+    int32 axis = 0;
+    axis_tensor->CopyDataFromTensor(&axis);
+    axis =
+        vx::delegate::utils::ConvertAxis(axis, input_tensor->GetShape().size());
+
+    std::vector<int32_t> slices_i32(builtin->num_splits);
+    std::vector<uint32_t> slices;
+    slices_tensor->CopyDataFromTensor(slices_i32.data());
+    for (auto s : slices_i32) {
+      slices.push_back(s);
+    }
+
+    auto op = delegate->GetGraph()->CreateOperation<tim::vx::ops::Split>(
+        axis, slices);
+
+    (*op).BindInput(inputs[0]);
+    (*op).BindOutputs(outputs);
+
+    delegate->GetOps().push_back(std::move(op));
+
+    return true;
+  }
+};
+
 struct Select : public OpMapperBase<EmptyStructPlaceholder> {
   bool IsOpSupported(TfLiteContext* context,
                      TfLiteNode* node,
@@ -1839,6 +1895,7 @@ static const std::map<int, createIOpMapItemFunc> reg = {
                        LogicalOpMapper<tim::vx::ops::LogicalOr>,
                        "Or"),
     REGISTER_OP_MAPPER(kTfLiteBuiltinSlice, Slice),
+    REGISTER_OP_MAPPER(kTfLiteBuiltinSplitV, SplitVMapper),
     REGISTER_OP_MAPPER(kTfLiteBuiltinTransposeConv, TransposeConvMapper),
     REGISTER_OP_MAPPER(kTfLiteBuiltinSelect, Select),
     REGISTER_OP_MAPPER(kTfLiteBuiltinSelectV2, Select),
