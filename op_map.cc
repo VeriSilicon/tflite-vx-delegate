@@ -1312,6 +1312,47 @@ struct BatchMatmul : public OpMapperBase<TfLiteBatchMatMulParams> {
   }
 };
 
+struct Rnn : public OpMapperBase<TfLiteRNNParams> {
+  bool HandleMapOp(vx::delegate::Delegate* delegate,
+                   std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
+                   std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
+                   const void* params) override {
+    TFLITE_LOG(TFLITE_LOG_INFO, "Create Rnn op");
+    const auto builtin = reinterpret_cast<const TfLiteRNNParams*>(params);
+
+    tim::vx::ops::RNNCell::ActivationType act;
+    switch (builtin -> activation)
+    {
+    case kTfLiteActRelu:
+      act = tim::vx::ops::RNNCell::kRELU;
+      break;
+    case kTfLiteActReluN1To1:
+      act = tim::vx::ops::RNNCell::kRELU1;
+      break;
+    case kTfLiteActRelu6:
+      act = tim::vx::ops::RNNCell::kRELU6;
+      break;
+    case kTfLiteActTanh:
+      act = tim::vx::ops::RNNCell::kTANH;
+      break;
+    case kTfLiteActSigmoid:
+      act = tim::vx::ops::RNNCell::kSIGMOID;
+      break;
+    default:
+      printf("Not supported activition type for Rnn = %d", static_cast<int32_t>(builtin -> activation));
+      break;
+    }
+    auto op = delegate->GetGraph()->CreateOperation<tim::vx::ops::RNNCell>(act);
+
+    (*op).BindInputs(inputs);
+    (*op).BindOutputs(outputs);
+
+    delegate->GetOps().push_back(std::move(op));
+
+    return true;
+  }
+};
+
 struct Gather : public OpMapperBase<TfLiteGatherParams> {
   bool HandleMapOp(vx::delegate::Delegate* delegate,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
@@ -1863,6 +1904,7 @@ static const std::map<int, createIOpMapItemFunc> reg = {
                        "Sigmoid"),
     REGISTER_OP_MAPPER(kTfLiteBuiltinTranspose, Transpose),
     REGISTER_OP_MAPPER(kTfLiteBuiltinBatchMatmul, BatchMatmul),
+    REGISTER_OP_MAPPER(kTfLiteBuiltinRnn, Rnn),
     REGISTER_OP_MAPPER(
         kTfLiteBuiltinNeg, SimpleOpMapper<tim::vx::ops::Neg>, "Neg"),
     REGISTER_OP_MAPPER(
