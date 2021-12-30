@@ -280,10 +280,10 @@ struct OpMapperBase : public vx::op_map::IOpMapper {
       if (input_index < 0) {
         continue;
       }
-      if (context->tensors[input_index].type == kTfLiteInt16) {
-        TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "Int16 input is not supported");
-        return false;
-      }
+      // if (context->tensors[input_index].type == kTfLiteInt16) {
+      //   TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "Int16 input is not supported");
+      //   return false;
+      // }
       if (context->tensors[input_index].type == kTfLiteInt64) {
         TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "Int64 input is not supported");
         return false;
@@ -1461,6 +1461,87 @@ struct GatherNd : public OpMapperBase<EmptyStructPlaceholder> {
   }
 };
 
+struct UnidirectionalSequenceLstm : public OpMapperBase<TfLiteUnidirectionalSequenceLSTMParams> {
+  bool HandleMapOp(vx::delegate::Delegate* delegate,
+                   std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
+                   std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
+                   const void* params) override {
+    TFLITE_LOG(TFLITE_LOG_INFO, "Create UnidirectionalSequenceLstm op");
+    const auto builtin = reinterpret_cast<const TfLiteUnidirectionalSequenceLSTMParams*>(params);
+    float cell_clip = builtin -> cell_clip;
+    float proj_clip = builtin -> proj_clip;
+    tim::vx::ops::UnidirectionalSequenceLstm::ActivationType act;
+    float forget_bias = 0;
+    bool time_major = builtin -> time_major;
+    tim::vx::ops::UnidirectionalSequenceLstm::ActivationType recurrent_act_type = tim::vx::ops::UnidirectionalSequenceLstm::kSIGMOID;
+    bool return_sequences = true;
+    switch (builtin -> activation)
+    {
+    case kTfLiteActRelu:
+      act = tim::vx::ops::UnidirectionalSequenceLstm::kRELU;
+      break;
+    case kTfLiteActRelu6:
+      act = tim::vx::ops::UnidirectionalSequenceLstm::kRELU6;
+      break;
+    case kTfLiteActTanh:
+      act = tim::vx::ops::UnidirectionalSequenceLstm::kTANH;
+      break;
+    case kTfLiteActSigmoid:
+      act = tim::vx::ops::UnidirectionalSequenceLstm::kSIGMOID;
+      break;
+    default:
+      printf("Not supported activition type for UnidirectionalSequenceLstm = %d", static_cast<int32_t>(builtin -> activation));
+      break;
+    }
+    auto op = delegate->GetGraph()->CreateOperation<tim::vx::ops::UnidirectionalSequenceLstm>(
+        cell_clip, proj_clip, act, forget_bias, time_major, recurrent_act_type, return_sequences);
+    auto tensor_placeholder = delegate->GetGraph()->CreateTensorPlaceHolder();
+
+    // temporary hack for sdd_lstm_int8.tflite
+    auto origin_spec = inputs[14]->GetSpec();
+    origin_spec.datatype_ = tim::vx::DataType::FLOAT32;
+    origin_spec.quantization_.Type() = tim::vx::QuantType::NONE;
+    std::vector<float> init_data(20);
+    for (auto i = init_data.begin(); i != init_data.end(); ++i) {
+      *i = 0.f;
+    }
+    auto cell_tensor = delegate->GetGraph()->CreateTensor(origin_spec, init_data.data());
+
+    std::vector<uint8_t> fake_state_data(20);
+    memset(fake_state_data.data(), 0, 20);
+    inputs[13]->CopyDataToTensor(fake_state_data.data(), 20);
+
+    (*op).BindInputs({
+      inputs[0],
+      inputs[13],    /*h_state*/
+      // inputs[14], /*c_state*/
+      cell_tensor,   // temporary hack for sdd_lstm_int8.tflite
+      inputs[1],
+      inputs[2],
+      inputs[3],
+      inputs[4],
+
+      inputs[5],
+      inputs[7],
+      inputs[6],
+      inputs[8],
+
+      delegate->GetGraph()->CreateTensorPlaceHolder(),       /*weight_c2i*/
+      delegate->GetGraph()->CreateTensorPlaceHolder(),       /*weight_c2f*/
+      delegate->GetGraph()->CreateTensorPlaceHolder(),       /*weight_c2o*/
+
+      inputs[9],
+      inputs[10],
+      inputs[11],
+      inputs[12]});
+    (*op).BindOutputs(outputs);
+
+    delegate->GetOps().push_back(std::move(op));
+
+    return true;
+  }
+};
+
 struct Batch2Space : public OpMapperBase<TfLiteBatchToSpaceNDParams> {
   virtual bool IsOpSupported(TfLiteContext* context,
                              TfLiteNode* node,
@@ -2127,6 +2208,7 @@ static const std::map<int, createIOpMapItemFunc> reg = {
         kTfLiteBuiltinTanh, SimpleOpMapper<tim::vx::ops::Tanh>, "tanh"),
     REGISTER_OP_MAPPER(kTfLiteBuiltinGather, Gather),
     REGISTER_OP_MAPPER(kTfLiteBuiltinGatherNd, GatherNd),
+    REGISTER_OP_MAPPER(kTfLiteBuiltinUnidirectionalSequenceLstm, UnidirectionalSequenceLstm),
     REGISTER_OP_MAPPER(kTfLiteBuiltinBatchToSpaceNd, Batch2Space),
     REGISTER_OP_MAPPER(kTfLiteBuiltinSpaceToBatchNd, Space2Batch),
     REGISTER_OP_MAPPER(kTfLiteBuiltinReverseV2, ReverseV2),
