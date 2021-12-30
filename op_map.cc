@@ -593,14 +593,14 @@ struct TransposeConvMapper
     uint32_t weights = inputs[1]->GetShape()[3];
     int32_t pad_left_inter =
         static_cast<int32_t>(ksize_width + stride_width * (input_width - 1) -
-                             output_shape[2]) / 2;
-    uint32_t pad_left = pad_left_inter > 0 ? pad_left_inter : 0;
-    uint32_t pad_right = pad_left;
+                             output_shape[2]);
+    uint32_t pad_left = pad_left_inter;
+    uint32_t pad_right = pad_left_inter - pad_left;
     int32_t pad_top_inter =
         static_cast<int32_t>(ksize_height + stride_height * (input_height - 1) -
-                             output_shape[1]) / 2;
-    uint32_t pad_top = pad_top_inter > 0 ? pad_top_inter : 0;
-    uint32_t pad_bottom = pad_top;
+                             output_shape[1]);
+    uint32_t pad_top = pad_top_inter/2;
+    uint32_t pad_bottom = pad_top_inter - pad_top;
     std::array<uint32_t, 2> ksize{ksize_width, ksize_height};
     std::array<uint32_t, 2> stride{stride_width, stride_height};
     std::array<uint32_t, 2> output_padding{0, 0};
