@@ -21,8 +21,8 @@ class cpu:
             shape = input['shape']
             np_dtype = input['dtype']
 
-            # data = np.random.normal(0, 127, shape).astype(np_dtype)
-            data = np.zeros(shape).astype(np_dtype)
+            data = np.random.normal(0, 127, shape).astype(np_dtype)
+            # data = np.zeros(shape).astype(np_dtype)
             self.interpreter.set_tensor(idx, data)
             in_data.append(data)
         
