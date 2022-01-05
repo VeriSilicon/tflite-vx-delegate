@@ -1789,6 +1789,46 @@ struct PackMapper : public OpMapperBase<TfLitePackParams> {
   }
 };
 
+struct OneHotMapper : public OpMapperBase<TfLiteOneHotParams> {
+  bool IsOpSupported(TfLiteContext* context,
+                     TfLiteNode* node,
+                     const TfLiteRegistration* registration) const override {
+    auto output_tensor = context->tensors[node->outputs->data[0]];
+    if (output_tensor.type == kTfLiteBool) {
+      TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "Bool type output is not supported");
+      return false;
+    }
+    return true;
+  }
+  bool HandleMapOp(vx::delegate::Delegate* delegate,
+                   std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
+                   std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
+                   const void* params) override {
+    TFLITE_LOG(TFLITE_LOG_INFO, "Creating OneHot op");
+    const auto builtin = reinterpret_cast<const TfLiteOneHotParams*>(params);
+    auto depth = inputs[1];
+    auto on_value = inputs[2];
+    auto off_value = inputs[3];
+    int32_t vx_axis = vx::delegate::utils::ConvertAxis(builtin->axis,
+        outputs[0]->GetShape().size());
+
+    int32_t depth_data;
+    float on_value_data;
+    float off_value_data;
+    depth->CopyDataFromTensor(&depth_data);
+    on_value->CopyDataFromTensor(&on_value_data);
+    off_value->CopyDataFromTensor(&off_value_data);
+
+    auto op = delegate->GetGraph()->CreateOperation<tim::vx::ops::OneHot>(
+        depth_data, on_value_data, off_value_data, vx_axis);
+    (*op).BindInputs(inputs);
+    (*op).BindOutputs(outputs);
+    delegate->GetOps().push_back(std::move(op));
+
+    return true;
+  }
+};
+
 template <typename T_OperationType>
 struct ArgOpMapper : public OpMapperBase<EmptyStructPlaceholder> {
   std::string name_;
@@ -1849,6 +1889,7 @@ static const std::map<int, createIOpMapItemFunc> reg = {
     REGISTER_OP_MAPPER(kTfLiteBuiltinStridedSlice, StridedSliceMapper),
     REGISTER_OP_MAPPER(kTfLiteBuiltinPad, PadMapper),
     REGISTER_OP_MAPPER(kTfLiteBuiltinExpandDims, ExpandDimsMapper),
+    REGISTER_OP_MAPPER(kTfLiteBuiltinOneHot, OneHotMapper),
     REGISTER_OP_MAPPER(
         kTfLiteBuiltinAbs, SimpleOpMapper<tim::vx::ops::Abs>, "Abs"),
     REGISTER_OP_MAPPER(
@@ -1863,6 +1904,22 @@ static const std::map<int, createIOpMapItemFunc> reg = {
         kTfLiteBuiltinRsqrt, SimpleOpMapper<tim::vx::ops::Rsqrt>, "Rsqrt"),
     REGISTER_OP_MAPPER(
         kTfLiteBuiltinSquare, SimpleOpMapper<tim::vx::ops::Square>, "Square"),
+    REGISTER_OP_MAPPER(
+        kTfLiteBuiltinFloor, SimpleOpMapper<tim::vx::ops::Floor>, "Floor"),
+    REGISTER_OP_MAPPER(
+        kTfLiteBuiltinFloorDiv, SimpleOpMapper<tim::vx::ops::FloorDiv>, "FloorDiv"),
+    REGISTER_OP_MAPPER(
+        kTfLiteBuiltinGreater, SimpleOpMapper<tim::vx::ops::Greater>, "Greater"),
+    REGISTER_OP_MAPPER(
+        kTfLiteBuiltinGreaterEqual, SimpleOpMapper<tim::vx::ops::GreaterOrEqual>, "GreaterEqual"),
+    REGISTER_OP_MAPPER(
+        kTfLiteBuiltinLess, SimpleOpMapper<tim::vx::ops::Less>, "Less"),
+    REGISTER_OP_MAPPER(
+        kTfLiteBuiltinLessEqual, SimpleOpMapper<tim::vx::ops::LessOrEqual>, "LessEqual"),
+    REGISTER_OP_MAPPER(
+        kTfLiteBuiltinNotEqual, SimpleOpMapper<tim::vx::ops::NotEqual>, "NotEqual"),
+    REGISTER_OP_MAPPER(
+        kTfLiteBuiltinEqual, SimpleOpMapper<tim::vx::ops::Equal>, "Equal"),
     REGISTER_OP_MAPPER(kTfLiteBuiltinLogicalNot,
                        SimpleOpMapper<tim::vx::ops::LogicalNot>,
                        "LogicalNot"),
