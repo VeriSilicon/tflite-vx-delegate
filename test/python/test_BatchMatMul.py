@@ -3,6 +3,7 @@ import tensorflow as tf
 import numpy as np
 from tensorflow.python import keras
 import utils
+import tempfile
 
 class BatchMatMulLayer(keras.layers.Layer):
     def __init__(self, **kwargs):
@@ -40,7 +41,7 @@ def test_BatchMatMul(delegate_lib, qtype, m, k, n, b):
 
     def data_set():
         for _ in range(10):
-            yield [tf.random.normal(a_shape, 0, 127, tf.float32), 
+            yield [tf.random.normal(a_shape, 0, 127, tf.float32),
                    tf.random.normal(b_shape, 0, 127, tf.float32)]
     if (qtype is True):
         converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS_INT8]
@@ -48,14 +49,15 @@ def test_BatchMatMul(delegate_lib, qtype, m, k, n, b):
         converter.inference_input_type = tf.int8
         converter.inference_output_type = tf.int8
 
-    tflite_model = converter.convert()       
-    model_path = "/tmp/test_model.tflite"
-    open(model_path, "wb").write(tflite_model)
+    fp = tempfile.NamedTemporaryFile()
+    tflite_model = converter.convert()
+    fp.write(tflite_model)
+    fp.flush()
 
     npu_ = utils.npu(delegate_lib)
     cpu_ = utils.cpu()
-    (gold_in, gold_out)= cpu_.run_with_rand_data(model_path)
-    npu_out = npu_.run(model_path, gold_in)
-
+    (gold_in, gold_out)= cpu_.run_with_rand_data(fp.name)
+    npu_out = npu_.run(fp.name, gold_in)
+    fp.close()
     for (g, n) in zip(gold_out, npu_out):
         assert pytest.approx(g, n)
