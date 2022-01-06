@@ -8,6 +8,6 @@
 # run test case with pytest
 pytest test_conv2d.py --external_delegate <full path to your libvx_delegate.so>
 # - run single test with -k
-pytest -k -k test_conv2d[True-1-1-224-224-3-3-1] test_conv2d.py --external_delegate <full path to your libvx_delegate.so>
+pytest -k test_conv2d[True-1-1-224-224-3-3-1] test_conv2d.py --external_delegate <full path to your libvx_delegate.so>
 # - collect test case with --co
 ```
