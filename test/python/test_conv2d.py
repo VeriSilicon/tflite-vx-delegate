@@ -1,5 +1,6 @@
 import pytest
 import tensorflow as tf
+from tensorflow.python import keras
 import numpy as np
 import utils
 import tempfile
@@ -19,9 +20,9 @@ def test_conv2d(delegate_lib, batch_size, in_w, in_h, in_ch, out_ch, k_w, k_h, q
         for _ in range(100):
             yield [tf.random.normal((batch_size, in_h, in_w, in_ch), 0, 127, input_dtype)]
 
-    model = tf.keras.models.Sequential([
-        tf.keras.layers.Input(shape = input_shape[1:], batch_size= input_shape[0]),
-        tf.keras.layers.Conv2D(filters = out_channel, kernel_size= kernel_shape)
+    model = keras.models.Sequential([
+        keras.layers.Input(shape = input_shape[1:], batch_size= input_shape[0]),
+        keras.layers.Conv2D(filters = out_channel, kernel_size= kernel_shape)
         ])
     model.build(input_shape=input_shape)
 

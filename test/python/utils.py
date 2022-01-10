@@ -1,4 +1,3 @@
-import tensorflow as tf
 import numpy as np
 from numpy import dot
 import tflite_runtime.interpreter as tflite

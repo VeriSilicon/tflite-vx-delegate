@@ -2,8 +2,12 @@ import pytest
 import tensorflow as tf
 import numpy as np
 from tensorflow.python import keras
-import utils
 import tempfile
+
+import sys
+
+import utils
+
 
 class BatchMatMulLayer(keras.layers.Layer):
     def __init__(self, **kwargs):
