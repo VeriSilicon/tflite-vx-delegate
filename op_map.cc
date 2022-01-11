@@ -1860,6 +1860,56 @@ struct ArgOpMapper : public OpMapperBase<EmptyStructPlaceholder> {
   }
 };
 
+template <typename T_Param>
+struct Conv3dKind
+    : public OpMapperBase<T_Param, FusedActivationAction<0, T_Param>> {};
+struct Conv3dMapper : public Conv3dKind<TfLiteConv3DParams> {
+  virtual bool IsOpSupported(TfLiteContext* context,
+                             TfLiteNode* node,
+                             const TfLiteRegistration* registration) const {
+    auto input_tensor = context->tensors[node->inputs->data[0]];
+    auto weight_tensor = context->tensors[node->inputs->data[1]];
+
+    if (input_tensor.type != weight_tensor.type) {
+      TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "hybrid data type is not supported in conv3d.");
+      return false;
+    }
+    return true;
+  }
+
+  bool HandleMapOp(vx::delegate::Delegate* delegate,
+                   std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
+                   std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
+                   const void* params) override {
+    TFLITE_LOG(TFLITE_LOG_INFO, "Creating Conv3d op");
+    const auto builtin = reinterpret_cast<const TfLiteConv3DParams*>(params);
+
+    // tensorflow kernel layout [kd, Kh, Kw, Ic, Oc] ---> TIM-VX [Oc, Ic, Kw, Kh, Kd]
+    int32_t weights = inputs[1]->GetShape()[0];
+    int32_t kernel_w = inputs[1]->GetShape()[2];
+    int32_t kernel_h = inputs[1]->GetShape()[3];
+    int32_t kernel_d = inputs[1]->GetShape()[4];
+
+    auto op = delegate->GetGraph()->CreateOperation<tim::vx::ops::Conv3d>(
+        static_cast<int32_t>(weights),
+        TflitePadTypeToVsiPadType(builtin->padding),
+        std::array<int32_t, 3>({kernel_w, kernel_h, kernel_d}),
+        std::array<int32_t, 3>(
+            {builtin->stride_width, builtin->stride_height, builtin->stride_depth}),
+        std::array<int32_t, 3>(
+            {builtin->dilation_width_factor, builtin->dilation_height_factor, builtin->dilation_depth_factor}),
+        0,
+        tim::vx::DataLayout::CWHDN, tim::vx::DataLayout::OcIcWHD);
+
+    (*op).BindInputs(inputs);
+    (*op).BindOutputs(outputs);
+
+    delegate->GetOps().push_back(std::move(op));
+
+    return true;
+  }
+};
+
 using createIOpMapItemFunc = std::function<std::unique_ptr<IOpMapper>()>;
 static const std::map<int, createIOpMapItemFunc> reg = {
 #define REGISTER_OP_MAPPER(TFLITE_OP_CODE, MAPPER_TYPE, ...)                  \
@@ -2003,6 +2053,7 @@ static const std::map<int, createIOpMapItemFunc> reg = {
         kTfLiteBuiltinArgMin, ArgOpMapper<tim::vx::ops::ArgMin>, "Min"),
     REGISTER_OP_MAPPER(
         kTfLiteBuiltinArgMax, ArgOpMapper<tim::vx::ops::ArgMax>, "Max"),
+    REGISTER_OP_MAPPER(kTfLiteBuiltinConv3d, Conv3dMapper),
 
 #undef REGISTER_OP_MAPPER
 };
