@@ -5,15 +5,16 @@ import numpy as np
 import utils
 import tempfile
 
-@pytest.mark.parametrize("batch_size, channels",  [(1,2)])
+@pytest.mark.parametrize("batch_size, channels",  [(1,1),(2,2)])
 @pytest.mark.parametrize("rows, cols",  [(224,224)])
-@pytest.mark.parametrize("k_rows, k_cols",  [(20,20),(14,14),(2,2)])
+@pytest.mark.parametrize("filters",  [1,2])
+@pytest.mark.parametrize("k_rows, k_cols",  [(3,3)])
 @pytest.mark.parametrize("strides",  [1,2])
 @pytest.mark.parametrize("padding",  ['valid','same'])
 @pytest.mark.parametrize("bias_initializer",  ['zeros','ones'])
 @pytest.mark.parametrize("qtype",   [True,False])
 
-def test_transpose_conv2d(delegate_lib, batch_size, channels, rows, cols, k_rows, k_cols, strides, padding, bias_initializer, qtype):
+def test_transpose_conv2d(delegate_lib, batch_size, channels, filters, rows, cols, k_rows, k_cols, strides, padding, bias_initializer, qtype):
     input_shape = (batch_size, rows, cols, channels)
     kernel_size = (k_rows, k_cols)
     input_dtype = tf.float32
@@ -24,7 +25,7 @@ def test_transpose_conv2d(delegate_lib, batch_size, channels, rows, cols, k_rows
             yield [tf.random.normal(input_shape, 0, 127, input_dtype)]
 
     inputs = keras.Input(shape = input_shape[1:], batch_size= input_shape[0], name= "input")
-    transpose_conv2d = keras.layers.Conv2DTranspose(filters=batch_size, kernel_size=kernel_size, strides=strides, padding=padding, bias_initializer=bias_initializer)(inputs)
+    transpose_conv2d = keras.layers.Conv2DTranspose(filters=filters, kernel_size=kernel_size, strides=strides, padding=padding, bias_initializer=bias_initializer)(inputs)
     model = keras.Model(inputs = inputs, outputs = transpose_conv2d)
 
     model.build(input_shape)
