@@ -445,7 +445,8 @@ struct FullyConnectedMapper
     }
     for (int i = 0; i < node->inputs->size; i++) {
       int input_index = node->inputs->data[i];
-      if (context->tensors[input_index].type == kTfLiteInt16) {
+      if (input_index >= 0 && input_index < context->tensors_size &&
+          context->tensors[input_index].type == kTfLiteInt16) {
         TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "Int16 input is not supported");
         return false;
       }
