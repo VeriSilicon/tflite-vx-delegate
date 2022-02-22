@@ -32,6 +32,7 @@
 #include <memory>
 #include <tuple>
 #include <vector>
+#include <numeric>
 
 #include "utils.h"
 
@@ -855,10 +856,13 @@ struct StridedSliceMapper : public OpMapperBase<TfLiteStridedSliceParams> {
     std::reverse(begin_dims.begin(), begin_dims.end());
 
     std::vector<int32_t> end_dims(end_tensor->GetShape()[0]);
+    int32_t end_pos = 1 + std::accumulate(input_shape.begin(), input_shape.end(), 0, [](int32_t lhs, int32_t rhs){
+      return std::max(lhs, rhs);
+    });
     end_tensor->CopyDataFromTensor(end_dims.data());
     for (size_t i = 0; i < end_dims.size(); i++) {
       if (end_mask & (1 << i)) {
-        end_dims[i] = -1;
+        end_dims[i] = end_pos;
       }
     }
     std::reverse(end_dims.begin(), end_dims.end());
@@ -876,7 +880,7 @@ struct StridedSliceMapper : public OpMapperBase<TfLiteStridedSliceParams> {
       }
       i = end_dims.size();
       for (; i < input_shape.size(); i++) {
-        end_dims.insert(end_dims.begin(), -1);
+        end_dims.insert(end_dims.begin(), end_pos);
       }
       i = strides_dims.size();
       for (; i < input_shape.size(); i++) {
@@ -889,7 +893,7 @@ struct StridedSliceMapper : public OpMapperBase<TfLiteStridedSliceParams> {
     }
 
     for (size_t i = 0; i < end_dims.size(); i++) {
-      end_dims[i] = end_dims[i] == -1 ? input_shape[i] : end_dims[i];
+      end_dims[i] = end_dims[i] == end_pos ? input_shape[i] : end_dims[i];
       end_dims[i] = end_dims[i] > static_cast<int32_t>(input_shape[i])
                         ? input_shape[i]
                         : end_dims[i];
@@ -1764,7 +1768,9 @@ struct PackMapper : public OpMapperBase<TfLitePackParams> {
                              TfLiteNode* node,
                              const TfLiteRegistration* registration) const {
     auto input_tensor = context->tensors[node->inputs->data[0]];
-    if (input_tensor.type == kTfLiteInt32 || input_tensor.type == kTfLiteInt8 ||
+    if (input_tensor.type == kTfLiteInt32 
+      // || input_tensor.type == kTfLiteInt8 
+      ||
         (input_tensor.dims->size == 1 && (input_tensor.type == kTfLiteInt8 ||
                                           input_tensor.type == kTfLiteUInt8))) {
       return false;
