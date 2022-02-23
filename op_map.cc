@@ -230,6 +230,7 @@ struct IAction {
                        std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
                        std::vector<std::shared_ptr<tim::vx::Tensor>>& states,
                        const void* params) const = 0;
+  virtual ~IAction(){};
 };
 
 template <ActionTargetType type, int Port>
