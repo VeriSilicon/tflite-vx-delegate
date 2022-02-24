@@ -1769,9 +1769,7 @@ struct PackMapper : public OpMapperBase<TfLitePackParams> {
                              TfLiteNode* node,
                              const TfLiteRegistration* registration) const {
     auto input_tensor = context->tensors[node->inputs->data[0]];
-    if (input_tensor.type == kTfLiteInt32 
-      // || input_tensor.type == kTfLiteInt8 
-      ||
+    if (input_tensor.type == kTfLiteInt32 ||
         (input_tensor.dims->size == 1 && (input_tensor.type == kTfLiteInt8 ||
                                           input_tensor.type == kTfLiteUInt8))) {
       return false;
