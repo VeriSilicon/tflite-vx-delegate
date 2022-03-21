@@ -1,0 +1,86 @@
+import pytest
+import tensorflow as tf
+from tensorflow.python import keras
+import tempfile
+
+import utils
+
+input = tf.random.normal([2,6,4,2], 0, 4, tf.float32)
+kernel = tf.random.normal([2,2,2,3], 0, 4, tf.float32)
+
+class Conv2dLayer(keras.layers.Layer):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    # @tf.function
+    def __call__(self, x):
+        return tf.nn.conv2d(x, kernel, strides=[1, 1, 1, 1], padding='VALID')
+
+class StrideSliceLayer(keras.layers.Layer):
+    def __init__(self, begin, end, strides, end_mask, shrink_axis_mask, **kwargs):
+        self.begin = begin
+        self.end = end
+        self.strides = strides
+        self.shrink_axis_mask = shrink_axis_mask
+        self.end_mask = end_mask
+        super().__init__(**kwargs)
+
+    def __call__(self, input):
+        return tf.strided_slice(input, self.begin, self.end, self.strides, end_mask=self.end_mask, shrink_axis_mask = self.shrink_axis_mask)
+
+class Conv2dStrideSliceModel(keras.Model):
+    def __init__(self, begin, end, strides, end_mask, shrink_axis_mask, **kwargs):
+        super().__init__(**kwargs)
+        self.conv2d_ = Conv2dLayer()
+        self.stride_slice_ = StrideSliceLayer(begin, end, strides, end_mask, shrink_axis_mask)
+
+    # @tf.function
+    def call(self, input, training=False, mask=None):
+        conv2d_out = self.conv2d_(input)  #as only one input, don't us input[0],input[1]
+        o = self.stride_slice_(conv2d_out)
+        return o
+
+@pytest.mark.parametrize("qtype",            [False])
+@pytest.mark.parametrize("shrink_axis_mask", [0b1,0b10,0b101,0b110,0b1110])
+@pytest.mark.parametrize("end_mask",         [0b1,0b11,0b101,0b111,0b1010])
+@pytest.mark.parametrize("begin",            [(0, 0, 0, 0)])
+@pytest.mark.parametrize("end",              [(1, 4, 3, 2)])
+@pytest.mark.parametrize("strides",          [(1, 1, 1, 1)])
+def test_stride_slice(delegate_lib, begin, end, strides, end_mask, shrink_axis_mask, qtype):
+
+    model = Conv2dStrideSliceModel(begin, end, strides, end_mask, shrink_axis_mask)
+    model.build(input_shape=input.shape)  #while multiply input, use [x.shape, y.shape]
+    model.predict(input)
+
+    converter = tf.lite.TFLiteConverter.from_keras_model(model)
+    converter.optimizations = [tf.lite.Optimize.DEFAULT]
+
+    def data_set():
+        for _ in range(10):
+            yield [tf.random.normal(input.shape, 0, 127, tf.float32),
+                   tf.random.normal(kernel.shape, 0, 127, tf.float32)]
+    if (qtype is True):
+        converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS_INT8]
+        converter.representative_dataset = data_set
+        converter.inference_input_type = tf.int8
+        converter.inference_output_type = tf.int8
+
+    tflite_model = converter.convert()
+
+    npu_ = utils.npu(delegate_lib)
+    cpu_ = utils.cpu()
+
+    # model_path = "/tmp/model.tflite"
+    # open(model_path, "wb").write(tflite_model)
+    # (gold_in, gold_out)= cpu_.run_with_rand_data(tflite_model)
+    # npu_out = npu_.run(tflite_model, gold_in)
+
+    fp = tempfile.NamedTemporaryFile()
+    fp.write(tflite_model)
+    fp.flush()
+    (gold_in, gold_out)= cpu_.run_with_rand_data(fp.name)
+    npu_out = npu_.run(fp.name, gold_in)
+    fp.close()
+
+    for (g, n) in zip(gold_out, npu_out):
+        assert pytest.approx(g, n)
