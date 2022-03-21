@@ -904,9 +904,16 @@ struct StridedSliceMapper : public OpMapperBase<TfLiteStridedSliceParams> {
       strides_dims[i] = strides_dims[i] == -1 ? 1 : strides_dims[i];
     }
 
-    begin_mask = 0;
-    end_mask = 0;
-
+    if (begin_mask) {
+      int32_t t = 0;
+      int32_t input_dim = input_shape.size();
+      for (size_t i = 0; i < input_dim; i++) {
+        if (begin_mask & (1 << i)) {
+          t = t | (1 << (input_dim - i - 1));
+        }
+      }
+      begin_mask = t;
+    }
     if (shrink_axis_mask) {
       int32_t t = 0;
       int32_t input_dim = input_shape.size();
@@ -916,6 +923,16 @@ struct StridedSliceMapper : public OpMapperBase<TfLiteStridedSliceParams> {
         }
       }
       shrink_axis_mask = t;
+    }
+    if (end_mask) {
+      int32_t t = 0;
+      int32_t input_dim = input_shape.size();
+      for (size_t i = 0; i < input_dim; i++) {
+        if (end_mask & (1 << i)) {
+          t = t | (1 << (input_dim - i - 1));
+        }
+      }
+      end_mask = t;
     }
 
     auto op = delegate->GetGraph()->CreateOperation<tim::vx::ops::StridedSlice>(
