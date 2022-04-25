@@ -5,9 +5,8 @@ import tempfile
 
 import utils
 
-input = tf.random.normal([2,6,4,2], 0, 4, tf.float32)
-kernel = tf.random.normal([2,2,2,3], 0, 4, tf.float32)
-
+input = tf.random.normal([1,4,3,2], 0, 4, tf.float32)   #nhwc
+kernel = tf.random.normal([3,3,2,3], 0, 4, tf.float32)   #hwio
 class Conv2dLayer(keras.layers.Layer):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -16,39 +15,31 @@ class Conv2dLayer(keras.layers.Layer):
     def __call__(self, x):
         return tf.nn.conv2d(x, kernel, strides=[1, 1, 1, 1], padding='VALID')
 
-class StrideSliceLayer(keras.layers.Layer):
-    def __init__(self, begin, end, strides, end_mask, shrink_axis_mask, **kwargs):
-        self.begin = begin
-        self.end = end
-        self.strides = strides
-        self.shrink_axis_mask = shrink_axis_mask
-        self.end_mask = end_mask
+class StackLayer(keras.layers.Layer):
+    def __init__(self, axis, **kwargs):
+        self.axis = axis
         super().__init__(**kwargs)
 
     def __call__(self, input):
-        return tf.strided_slice(input, self.begin, self.end, self.strides, end_mask=self.end_mask, shrink_axis_mask = self.shrink_axis_mask)
+        return tf.stack([input, input],axis = self.axis)
 
-class Conv2dStrideSliceModel(keras.Model):
-    def __init__(self, begin, end, strides, end_mask, shrink_axis_mask, **kwargs):
+class Conv2dStackModel(keras.Model):
+    def __init__(self, axis, **kwargs):
         super().__init__(**kwargs)
         self.conv2d_ = Conv2dLayer()
-        self.stride_slice_ = StrideSliceLayer(begin, end, strides, end_mask, shrink_axis_mask)
+        self.stack_ = StackLayer(axis)
 
     # @tf.function
-    def call(self, input, training=False, mask=None):
-        conv2d_out = self.conv2d_(input)  #as only one input, don't us input[0],input[1]
-        o = self.stride_slice_(conv2d_out)
+    def call(self, input):
+        conv2d_out = self.conv2d_(input)  #as only one input, don't use input[0],input[1]
+        o = self.stack_(conv2d_out)
         return o
 
-@pytest.mark.parametrize("qtype",            [False])
-@pytest.mark.parametrize("shrink_axis_mask", [0b1,0b10,0b101,0b110,0b1110])
-@pytest.mark.parametrize("end_mask",         [0b1,0b11,0b101,0b111,0b1010])
-@pytest.mark.parametrize("begin",            [(0, 0, 0, 0)])
-@pytest.mark.parametrize("end",              [(1, 4, 3, 2)])
-@pytest.mark.parametrize("strides",          [(1, 1, 1, 1)])
-def test_stride_slice(delegate_lib, begin, end, strides, end_mask, shrink_axis_mask, qtype):
+@pytest.mark.parametrize("qtype",         [False])
+@pytest.mark.parametrize("axis",          [0,1,2,3,4])
+def test_stride_slice(delegate_lib, axis, qtype):
 
-    model = Conv2dStrideSliceModel(begin, end, strides, end_mask, shrink_axis_mask)
+    model = Conv2dStackModel(axis)
     model.build(input_shape=input.shape)  #while multiply input, use [x.shape, y.shape]
     model.predict(input)
 
@@ -72,8 +63,8 @@ def test_stride_slice(delegate_lib, begin, end, strides, end_mask, shrink_axis_m
 
     # model_path = "/tmp/model.tflite"
     # open(model_path, "wb").write(tflite_model)
-    # (gold_in, gold_out)= cpu_.run_with_rand_data(model_path)
-    # npu_out = npu_.run(model_path, gold_in)
+    # (gold_in, gold_out)= cpu_.run_with_rand_data(tflite_model)
+    # npu_out = npu_.run(tflite_model, gold_in)
 
     fp = tempfile.NamedTemporaryFile()
     fp.write(tflite_model)
