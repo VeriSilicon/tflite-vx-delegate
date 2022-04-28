@@ -1,28 +1,26 @@
 /****************************************************************************
-*
-*    Copyright (c) 2021 Vivante Corporation
-*
-*    Permission is hereby granted, free of charge, to any person obtaining a
-*    copy of this software and associated documentation files (the "Software"),
-*    to deal in the Software without restriction, including without limitation
-*    the rights to use, copy, modify, merge, publish, distribute, sublicense,
-*    and/or sell copies of the Software, and to permit persons to whom the
-*    Software is furnished to do so, subject to the following conditions:
-*
-*    The above copyright notice and this permission notice shall be included in
-*    all copies or substantial portions of the Software.
-*
-*    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-*    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-*    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-*    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-*    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-*    FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-*    DEALINGS IN THE SOFTWARE.
-*
-*****************************************************************************/
-
-#include "op_map.h"
+ *
+ *    Copyright (c) 2021 Vivante Corporation
+ *
+ *    Permission is hereby granted, free of charge, to any person obtaining a
+ *    copy of this software and associated documentation files (the "Software"),
+ *    to deal in the Software without restriction, including without limitation
+ *    the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ *    and/or sell copies of the Software, and to permit persons to whom the
+ *    Software is furnished to do so, subject to the following conditions:
+ *
+ *    The above copyright notice and this permission notice shall be included in
+ *    all copies or substantial portions of the Software.
+ *
+ *    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ *    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ *    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+ *THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ *    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ *    FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ *    DEALINGS IN THE SOFTWARE.
+ *
+ *****************************************************************************/
 
 #include <algorithm>
 #include <array>
@@ -30,19 +28,18 @@
 #include <iostream>
 #include <limits>
 #include <memory>
+#include <numeric>
 #include <tuple>
 #include <vector>
-#include <numeric>
 
-#include "utils.h"
-
-#include "tensorflow/lite/minimal_logging.h"
+#include "op_map.h"
 #include "tensorflow/lite/context_util.h"
 #include "tensorflow/lite/kernels/internal/reference/reference_ops.h"
 #include "tensorflow/lite/kernels/internal/tensor_ctypes.h"
 #include "tensorflow/lite/kernels/internal/types.h"
-
+#include "tensorflow/lite/minimal_logging.h"
 #include "tim/vx/ops.h"
+#include "utils.h"
 #include "vsi_npu_custom_op.h"
 
 using namespace tflite;
@@ -91,7 +88,9 @@ std::shared_ptr<tim::vx::Tensor> ProcessFusedActivation(
       op = delegate->GetGraph()->CreateOperation<tim::vx::ops::Sigmoid>();
       break;
     default:
-      TFLITE_LOG_PROD(TFLITE_LOG_WARNING, "Unsupported fused activation: %d", fused_activation);
+      TFLITE_LOG_PROD(TFLITE_LOG_WARNING,
+                      "Unsupported fused activation: %d",
+                      fused_activation);
   }
 
   auto processed_tensor = delegate->GetGraph()->CreateTensor(
@@ -110,8 +109,8 @@ std::shared_ptr<tim::vx::Tensor> ReverseInputTensor(
     vx::delegate::Delegate* delegate,
     const std::shared_ptr<tim::vx::Tensor>& original_tensor,
     std::vector<int32_t> axis) {
-  auto reversed_tensor = delegate->GetGraph()->CreateTensor(
-      original_tensor->GetSpec());
+  auto reversed_tensor =
+      delegate->GetGraph()->CreateTensor(original_tensor->GetSpec());
   std::shared_ptr<tim::vx::Operation> op =
       delegate->GetGraph()->CreateOperation<tim::vx::ops::Reverse>(axis);
   (*op).BindInput(original_tensor);
@@ -290,14 +289,17 @@ struct OpMapperBase : public vx::op_map::IOpMapper {
         return false;
       }
       if (context->tensors[input_index].dims->size > 6) {
-        TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "vx-delegate doesn't support the tensor whose dimension "
-                      "is greater than 6.");
+        TFLITE_LOG_PROD(
+            TFLITE_LOG_ERROR,
+            "vx-delegate doesn't support the tensor whose dimension "
+            "is greater than 6.");
         return false;
       }
       for (int j = 0; j < context->tensors[input_index].dims->size; j++) {
         if (context->tensors[input_index].dims->data[j] == 0) {
-          TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "vx-delegate doesn't support the tensor of which one "
-                        "of dims is 0");
+          TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
+                          "vx-delegate doesn't support the tensor of which one "
+                          "of dims is 0");
           return false;
         }
       }
@@ -314,8 +316,9 @@ struct OpMapperBase : public vx::op_map::IOpMapper {
       }
       for (int j = 0; j < context->tensors[output_index].dims->size; j++) {
         if (context->tensors[output_index].dims->data[j] == 0) {
-          TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "vx-delegate doesn't support the tensor of which one "
-                        "of dims is 0");
+          TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
+                          "vx-delegate doesn't support the tensor of which one "
+                          "of dims is 0");
           return false;
         }
       }
@@ -437,7 +440,8 @@ struct FullyConnectedMapper
     auto weight_tensor = context->tensors[node->inputs->data[1]];
 
     if (input_tensor.type != weight_tensor.type) {
-      TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "hybrid data type is not supported in fullyconnected.");
+      TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
+                      "hybrid data type is not supported in fullyconnected.");
       return false;
     }
     if (builtin->weights_format ==
@@ -506,7 +510,9 @@ struct SoftmaxMapper : public OpMapperBase<TfLiteSoftmaxParams> {
     int input_index = node->inputs->data[0];
     auto input_dims = context->tensors[input_index].dims;
     if (input_dims->data[1] > 65535 || input_dims->data[2] > 65535) {
-      TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "vx-delegate doesn't support tensor height/width > 65535");
+      TFLITE_LOG_PROD(
+          TFLITE_LOG_ERROR,
+          "vx-delegate doesn't support tensor height/width > 65535");
       return false;
     }
     return true;
@@ -536,7 +542,8 @@ struct Conv2dMapper : public Conv2dKind<TfLiteConvParams> {
     auto weight_tensor = context->tensors[node->inputs->data[1]];
 
     if (input_tensor.type != weight_tensor.type) {
-      TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "hybrid data type is not supported in conv2d.");
+      TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
+                      "hybrid data type is not supported in conv2d.");
       return false;
     }
     return true;
@@ -573,8 +580,7 @@ struct Conv2dMapper : public Conv2dKind<TfLiteConvParams> {
   }
 };
 
-struct TransposeConvMapper
-    : public OpMapperBase<TfLiteTransposeConvParams> {
+struct TransposeConvMapper : public OpMapperBase<TfLiteTransposeConvParams> {
   bool HandleMapOp(vx::delegate::Delegate* delegate,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
@@ -591,28 +597,34 @@ struct TransposeConvMapper
 
     uint32_t input_width = inputs[2]->GetShape()[1];
     uint32_t input_height = inputs[2]->GetShape()[2];
-    uint32_t ksize_width = inputs[1]->GetShape()[1];;
-    uint32_t ksize_height = inputs[1]->GetShape()[2];;
+    uint32_t ksize_width = inputs[1]->GetShape()[1];
+    ;
+    uint32_t ksize_height = inputs[1]->GetShape()[2];
+    ;
     uint32_t weights = inputs[1]->GetShape()[3];
-    int32_t pad_left_inter =
-        static_cast<int32_t>(ksize_width + stride_width * (input_width - 1) -
-                             output_shape[2]);
+    int32_t pad_left_inter = static_cast<int32_t>(
+        ksize_width + stride_width * (input_width - 1) - output_shape[2]);
     uint32_t pad_left = pad_left_inter;
     uint32_t pad_right = pad_left_inter - pad_left;
-    int32_t pad_top_inter =
-        static_cast<int32_t>(ksize_height + stride_height * (input_height - 1) -
-                             output_shape[1]);
-    uint32_t pad_top = pad_top_inter/2;
+    int32_t pad_top_inter = static_cast<int32_t>(
+        ksize_height + stride_height * (input_height - 1) - output_shape[1]);
+    uint32_t pad_top = pad_top_inter / 2;
     uint32_t pad_bottom = pad_top_inter - pad_top;
     std::array<uint32_t, 2> ksize{ksize_width, ksize_height};
     std::array<uint32_t, 2> stride{stride_width, stride_height};
     std::array<uint32_t, 2> output_padding{0, 0};
     std::array<uint32_t, 4> pad{pad_left, pad_right, pad_top, pad_bottom};
 
-    auto op =
-        delegate->GetGraph()->CreateOperation<tim::vx::ops::DeConv2d>(
-            weights, padding, ksize, stride, output_padding, pad, 1,
-            tim::vx::DataLayout::CWHN ,tim::vx::DataLayout::IcWHOc);
+    auto op = delegate->GetGraph()->CreateOperation<tim::vx::ops::DeConv2d>(
+        weights,
+        padding,
+        ksize,
+        stride,
+        output_padding,
+        pad,
+        1,
+        tim::vx::DataLayout::CWHN,
+        tim::vx::DataLayout::IcWHOc);
 
     std::vector<std::shared_ptr<tim::vx::Tensor>> input_tensor;
     input_tensor.push_back(inputs[2]);
@@ -640,7 +652,8 @@ struct Pool2dMapper : public Conv2dKind<TfLitePoolParams> {
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
                    const void* params) override {
-    TFLITE_LOG(TFLITE_LOG_INFO, "Creating Pool2d(%d) op", static_cast<int>(poolType));
+    TFLITE_LOG(
+        TFLITE_LOG_INFO, "Creating Pool2d(%d) op", static_cast<int>(poolType));
     const auto builtin = reinterpret_cast<const TfLitePoolParams*>(params);
 
     auto op = delegate->GetGraph()->CreateOperation<tim::vx::ops::Pool2d>(
@@ -670,7 +683,8 @@ struct DepthwiseConv2dMapper : public Conv2dKind<TfLiteDepthwiseConvParams> {
     auto weight_tensor = context->tensors[node->inputs->data[1]];
 
     if (input_tensor.type != weight_tensor.type) {
-      TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "hybrid data type is not supported in DepthwiseConv2d.");
+      TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
+                      "hybrid data type is not supported in DepthwiseConv2d.");
       return false;
     }
     return true;
@@ -696,7 +710,8 @@ struct DepthwiseConv2dMapper : public Conv2dKind<TfLiteDepthwiseConvParams> {
             {builtin->stride_width, builtin->stride_height}),
         std::array<uint32_t, 2>(
             {builtin->dilation_width_factor, builtin->dilation_height_factor}),
-        builtin->depth_multiplier, tim::vx::DataLayout::CWHN);
+        builtin->depth_multiplier,
+        tim::vx::DataLayout::CWHN);
 
     (*op).BindInputs(inputs);
     (*op).BindOutputs(outputs);
@@ -784,7 +799,9 @@ struct ReshapeMapper : public OpMapperBase<TfLiteReshapeParams> {
                    const void* params) override {
     TFLITE_LOG(TFLITE_LOG_INFO, "Creating Reshape op");
     const auto builtin = reinterpret_cast<const TfLiteReshapeParams*>(params);
-    std::vector<uint32_t> new_shape;
+    std::vector<int32_t> new_shape;
+    uint32_t total_size = 1, negative_index = 0;
+    std::vector<uint32_t> no_nagetive_shape;
 
     // The new shape may be passed to reshape op by
     // builtin prarameters or inputs[1], the two formats should be handled.
@@ -796,12 +813,26 @@ struct ReshapeMapper : public OpMapperBase<TfLiteReshapeParams> {
       new_shape.assign(shape_from_input1.rbegin(), shape_from_input1.rend());
     } else {
       for (int i = builtin->num_dimensions - 1; i >= 0; i--) {
-        new_shape.push_back(static_cast<uint32_t>(builtin->shape[i]));
+        new_shape.push_back(static_cast<int32_t>(builtin->shape[i]));
       }
     }
 
-    auto op =
-        delegate->GetGraph()->CreateOperation<tim::vx::ops::Reshape>(new_shape);
+    for (uint32_t i = 0; i < inputs[0]->GetShape().size(); ++i) {
+      total_size *= inputs[0]->GetShape().at(i);
+    }
+    for (uint32_t i = 0; i < new_shape.size(); ++i) {
+      if (new_shape.at(i) != -1) {
+        total_size /= new_shape.at(i);
+        no_nagetive_shape.push_back(new_shape.at(i));
+      } else {
+        negative_index = i;
+        no_nagetive_shape.push_back(0);  //hold a place for changes to the value
+      }
+    }
+    no_nagetive_shape.at(negative_index) = total_size;
+
+    auto op = delegate->GetGraph()->CreateOperation<tim::vx::ops::Reshape>(
+        no_nagetive_shape);
     (*op).BindInput(inputs[0]);
     (*op).BindOutput(outputs[0]);
 
@@ -857,9 +888,12 @@ struct StridedSliceMapper : public OpMapperBase<TfLiteStridedSliceParams> {
     std::reverse(begin_dims.begin(), begin_dims.end());
 
     std::vector<int32_t> end_dims(end_tensor->GetShape()[0]);
-    int32_t end_pos = 1 + std::accumulate(input_shape.begin(), input_shape.end(), 0, [](int32_t lhs, int32_t rhs){
-      return std::max(lhs, rhs);
-    });
+    int32_t end_pos = 1 + std::accumulate(input_shape.begin(),
+                                          input_shape.end(),
+                                          0,
+                                          [](int32_t lhs, int32_t rhs) {
+                                            return std::max(lhs, rhs);
+                                          });
     end_tensor->CopyDataFromTensor(end_dims.data());
     for (size_t i = 0; i < end_dims.size(); i++) {
       if (end_mask & (1 << i)) {
@@ -998,21 +1032,22 @@ using MulMapper =
     SimpleOpWithFusedActiovationMapper<tim::vx::ops::Multiply, TfLiteMulParams>;
 
 template <tim::vx::ResizeType resizeType>
-struct ResizeMapper
-    : public OpMapperBase<TfLiteResizeNearestNeighborParams> {
+struct ResizeMapper : public OpMapperBase<TfLiteResizeNearestNeighborParams> {
   virtual bool IsOpSupported(TfLiteContext* context,
                              TfLiteNode* node,
                              const TfLiteRegistration* registration) const {
-    TFLITE_LOG(TFLITE_LOG_INFO, "Check Resize(%d)", static_cast<int>(resizeType));
+    TFLITE_LOG(
+        TFLITE_LOG_INFO, "Check Resize(%d)", static_cast<int>(resizeType));
 
     int input_index = node->inputs->data[0];
     if ((context->tensors[input_index].type == kTfLiteInt8 ||
          context->tensors[input_index].type == kTfLiteUInt8) &&
         context->tensors[input_index].quantization.type ==
             kTfLiteNoQuantization) {
-      TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
+      TFLITE_LOG_PROD(
+          TFLITE_LOG_ERROR,
           "Int8 or uint8 input without quantization is not supported in "
-             "Resize");
+          "Resize");
       return false;
     }
 
@@ -1026,7 +1061,8 @@ struct ResizeMapper
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
                    const void* params) override {
-    TFLITE_LOG(TFLITE_LOG_INFO, "Creating Resize(%d)", static_cast<int>(resizeType));
+    TFLITE_LOG(
+        TFLITE_LOG_INFO, "Creating Resize(%d)", static_cast<int>(resizeType));
     auto input_shape = inputs[0]->GetShape();
     uint32_t resize_rank = inputs[1]->GetShape()[0];
     std::vector<int32_t> output_shape(resize_rank);
@@ -1041,9 +1077,9 @@ struct ResizeMapper
     // turn off optimization by default.
     bool enable_bilinear = false;
     bool can_resize_to_transposeconv = false;
-        // is_scale_integer &&
-        // ((enable_bilinear && resizeType == tim::vx::ResizeType::BILINEAR) ||
-        //  (resizeType == tim::vx::ResizeType::NEAREST_NEIGHBOR));
+    // is_scale_integer &&
+    // ((enable_bilinear && resizeType == tim::vx::ResizeType::BILINEAR) ||
+    //  (resizeType == tim::vx::ResizeType::NEAREST_NEIGHBOR));
 
     if (can_resize_to_transposeconv) {
       return ResizeToTransposeConv(
@@ -1157,7 +1193,7 @@ struct SqueezeMapper : public OpMapperBase<TfLiteSqueezeParams> {
         vx_axis[i] = vx::delegate::utils::ConvertAxis(builtin->squeeze_dims[i],
                                                       input_shape.size());
       }
-    } else { // tim-vx always needs axis.
+    } else {  // tim-vx always needs axis.
       for (int i = 0; i < input_shape.size(); ++i) {
         if (input_shape[i] == 1) {
           vx_axis.push_back(i);
@@ -1177,19 +1213,20 @@ struct SqueezeMapper : public OpMapperBase<TfLiteSqueezeParams> {
   }
 };
 
-struct Space2DepthMapper
-    : public OpMapperBase<TfLiteSpaceToDepthParams> {
+struct Space2DepthMapper : public OpMapperBase<TfLiteSpaceToDepthParams> {
   virtual bool IsOpSupported(TfLiteContext* context,
                              TfLiteNode* node,
                              const TfLiteRegistration* registration) const {
     for (int i = 0; i < node->inputs->size; i++) {
       int input_index = node->inputs->data[i];
       if (context->tensors[input_index].type == kTfLiteInt32) {
-        TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "Int32 input is not supported in Space2Depth");
+        TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
+                        "Int32 input is not supported in Space2Depth");
         return false;
       }
       if (context->tensors[input_index].type == kTfLiteInt64) {
-        TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "Int64 input is not supported in Space2Depth");
+        TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
+                        "Int64 input is not supported in Space2Depth");
         return false;
       }
       if ((context->tensors[input_index].type == kTfLiteInt8 ||
@@ -1227,28 +1264,30 @@ struct Space2DepthMapper
   }
 };
 
-struct Depth2SpaceMapper
-    : public OpMapperBase<TfLiteDepthToSpaceParams> {
+struct Depth2SpaceMapper : public OpMapperBase<TfLiteDepthToSpaceParams> {
   virtual bool IsOpSupported(TfLiteContext* context,
                              TfLiteNode* node,
                              const TfLiteRegistration* registration) const {
     for (int i = 0; i < node->inputs->size; i++) {
       int input_index = node->inputs->data[i];
       if (context->tensors[input_index].type == kTfLiteInt32) {
-        TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "Int32 input is not supported in Depth2Space");
+        TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
+                        "Int32 input is not supported in Depth2Space");
         return false;
       }
       if (context->tensors[input_index].type == kTfLiteInt64) {
-        TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "Int64 input is not supported in Depth2Space");
+        TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
+                        "Int64 input is not supported in Depth2Space");
         return false;
       }
       if ((context->tensors[input_index].type == kTfLiteInt8 ||
            context->tensors[input_index].type == kTfLiteUInt8) &&
           context->tensors[input_index].quantization.type ==
               kTfLiteNoQuantization) {
-        TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
-               "Int8 or uint8 input without quantization is not supported in "
-               "Depth2Space");
+        TFLITE_LOG_PROD(
+            TFLITE_LOG_ERROR,
+            "Int8 or uint8 input without quantization is not supported in "
+            "Depth2Space");
         return false;
       }
     }
@@ -1321,10 +1360,12 @@ struct BatchMatmul : public OpMapperBase<TfLiteBatchMatMulParams> {
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
                    const void* params) override {
     TFLITE_LOG(TFLITE_LOG_INFO, "Create BatchMatmul op");
-    const auto builtin = reinterpret_cast<const TfLiteBatchMatMulParams*>(params);
-    bool adj_x = builtin -> adj_x;
-    bool adj_y = builtin -> adj_y;
-    auto op = delegate->GetGraph()->CreateOperation<tim::vx::ops::Matmul>(adj_x, adj_y);
+    const auto builtin =
+        reinterpret_cast<const TfLiteBatchMatMulParams*>(params);
+    bool adj_x = builtin->adj_x;
+    bool adj_y = builtin->adj_y;
+    auto op = delegate->GetGraph()->CreateOperation<tim::vx::ops::Matmul>(
+        adj_x, adj_y);
 
     (*op).BindInputs(inputs);
     (*op).BindOutputs(outputs);
@@ -1344,26 +1385,26 @@ struct Rnn : public OpMapperBase<TfLiteRNNParams> {
     const auto builtin = reinterpret_cast<const TfLiteRNNParams*>(params);
 
     tim::vx::ops::RNNCell::ActivationType act;
-    switch (builtin -> activation)
-    {
-    case kTfLiteActRelu:
-      act = tim::vx::ops::RNNCell::kRELU;
-      break;
-    case kTfLiteActReluN1To1:
-      act = tim::vx::ops::RNNCell::kRELU1;
-      break;
-    case kTfLiteActRelu6:
-      act = tim::vx::ops::RNNCell::kRELU6;
-      break;
-    case kTfLiteActTanh:
-      act = tim::vx::ops::RNNCell::kTANH;
-      break;
-    case kTfLiteActSigmoid:
-      act = tim::vx::ops::RNNCell::kSIGMOID;
-      break;
-    default:
-      printf("Not supported activition type for Rnn = %d", static_cast<int32_t>(builtin -> activation));
-      break;
+    switch (builtin->activation) {
+      case kTfLiteActRelu:
+        act = tim::vx::ops::RNNCell::kRELU;
+        break;
+      case kTfLiteActReluN1To1:
+        act = tim::vx::ops::RNNCell::kRELU1;
+        break;
+      case kTfLiteActRelu6:
+        act = tim::vx::ops::RNNCell::kRELU6;
+        break;
+      case kTfLiteActTanh:
+        act = tim::vx::ops::RNNCell::kTANH;
+        break;
+      case kTfLiteActSigmoid:
+        act = tim::vx::ops::RNNCell::kSIGMOID;
+        break;
+      default:
+        printf("Not supported activition type for Rnn = %d",
+               static_cast<int32_t>(builtin->activation));
+        break;
     }
     auto op = delegate->GetGraph()->CreateOperation<tim::vx::ops::RNNCell>(act);
 
@@ -1421,22 +1462,25 @@ struct Batch2Space : public OpMapperBase<TfLiteBatchToSpaceNDParams> {
                              const TfLiteRegistration* registration) const {
     int input_index = node->inputs->data[0];
     if (context->tensors[input_index].dims->size != 4) {
-      TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "batch2space in vx-delagate only support 4D input");
+      TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
+                      "batch2space in vx-delagate only support 4D input");
       return false;
     }
     int block_index = node->inputs->data[1];
     if (context->tensors[block_index].dims->data[0] != 2) {
-      TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "batch2space in vx-delagate only support the input whose "
-                    "spatial dimensions is 2");
+      TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
+                      "batch2space in vx-delagate only support the input whose "
+                      "spatial dimensions is 2");
       return false;
     }
     if ((context->tensors[input_index].type == kTfLiteInt8 ||
          context->tensors[input_index].type == kTfLiteUInt8) &&
         context->tensors[input_index].quantization.type ==
             kTfLiteNoQuantization) {
-      TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
-             "Int8 or uint8 input without quantization is not supported in "
-             "Batch2Space");
+      TFLITE_LOG_PROD(
+          TFLITE_LOG_ERROR,
+          "Int8 or uint8 input without quantization is not supported in "
+          "Batch2Space");
       return false;
     }
     return true;
@@ -1474,13 +1518,15 @@ struct Space2Batch : public OpMapperBase<TfLiteSpaceToBatchNDParams> {
                              const TfLiteRegistration* registration) const {
     int input_index = node->inputs->data[0];
     if (context->tensors[input_index].dims->size != 4) {
-      TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "space2batch in vx-delegate only support 4D input");
+      TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
+                      "space2batch in vx-delegate only support 4D input");
       return false;
     }
     int block_index = node->inputs->data[1];
     if (context->tensors[block_index].dims->data[0] != 2) {
-      TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "space2batch in vx-delegate only support the input whose "
-                    "spatial dimensions is 2");
+      TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
+                      "space2batch in vx-delegate only support the input whose "
+                      "spatial dimensions is 2");
       return false;
     }
     return true;
@@ -1610,7 +1656,8 @@ struct Slice : public OpMapperBase<EmptyStructPlaceholder> {
     int batch_out = context->tensors[output_index].dims->data[0];
 
     if (input_dim_size > 3 && (batch_in != batch_out)) {
-      TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "vx-delegate doesn't support slice in batch.");
+      TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
+                      "vx-delegate doesn't support slice in batch.");
       return false;
     }
 
@@ -1719,7 +1766,8 @@ struct Select : public OpMapperBase<EmptyStructPlaceholder> {
     int input_x_index = node->inputs->data[1];
     if (context->tensors[condition_index].dims->size !=
         context->tensors[input_x_index].dims->size) {
-      TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "condition and input must have the same rank");
+      TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
+                      "condition and input must have the same rank");
       return false;
     }
     for (int i = 1; i < node->inputs->size; i++) {
@@ -1832,8 +1880,8 @@ struct OneHotMapper : public OpMapperBase<TfLiteOneHotParams> {
     auto depth = inputs[1];
     auto on_value = inputs[2];
     auto off_value = inputs[3];
-    int32_t vx_axis = vx::delegate::utils::ConvertAxis(builtin->axis,
-        outputs[0]->GetShape().size());
+    int32_t vx_axis = vx::delegate::utils::ConvertAxis(
+        builtin->axis, outputs[0]->GetShape().size());
 
     int32_t depth_data;
     float on_value_data;
@@ -1862,7 +1910,7 @@ struct ArgOpMapper : public OpMapperBase<EmptyStructPlaceholder> {
       std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
       std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
       const void* params) {
-      TFLITE_LOG(TFLITE_LOG_INFO, "Creating Arg %s op", name_.c_str());
+    TFLITE_LOG(TFLITE_LOG_INFO, "Creating Arg %s op", name_.c_str());
 
     auto axis_tensor = inputs[1];
     std::vector<int> axis(axis_tensor->GetShape()[0]);
@@ -1894,7 +1942,8 @@ struct Conv3dMapper : public Conv3dKind<TfLiteConv3DParams> {
     auto weight_tensor = context->tensors[node->inputs->data[1]];
 
     if (input_tensor.type != weight_tensor.type) {
-      TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "hybrid data type is not supported in conv3d.");
+      TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
+                      "hybrid data type is not supported in conv3d.");
       return false;
     }
     return true;
@@ -1907,7 +1956,8 @@ struct Conv3dMapper : public Conv3dKind<TfLiteConv3DParams> {
     TFLITE_LOG(TFLITE_LOG_INFO, "Creating Conv3d op");
     const auto builtin = reinterpret_cast<const TfLiteConv3DParams*>(params);
 
-    // tensorflow kernel layout [kd, Kh, Kw, Ic, Oc] ---> TIM-VX [Oc, Ic, Kw, Kh, Kd]
+    // tensorflow kernel layout [kd, Kh, Kw, Ic, Oc] ---> TIM-VX [Oc, Ic, Kw,
+    // Kh, Kd]
     int32_t weights = inputs[1]->GetShape()[0];
     int32_t kernel_w = inputs[1]->GetShape()[2];
     int32_t kernel_h = inputs[1]->GetShape()[3];
@@ -1917,12 +1967,15 @@ struct Conv3dMapper : public Conv3dKind<TfLiteConv3DParams> {
         static_cast<int32_t>(weights),
         TflitePadTypeToVsiPadType(builtin->padding),
         std::array<int32_t, 3>({kernel_w, kernel_h, kernel_d}),
-        std::array<int32_t, 3>(
-            {builtin->stride_width, builtin->stride_height, builtin->stride_depth}),
-        std::array<int32_t, 3>(
-            {builtin->dilation_width_factor, builtin->dilation_height_factor, builtin->dilation_depth_factor}),
+        std::array<int32_t, 3>({builtin->stride_width,
+                                builtin->stride_height,
+                                builtin->stride_depth}),
+        std::array<int32_t, 3>({builtin->dilation_width_factor,
+                                builtin->dilation_height_factor,
+                                builtin->dilation_depth_factor}),
         0,
-        tim::vx::DataLayout::CWHDN, tim::vx::DataLayout::OcIcWHD);
+        tim::vx::DataLayout::CWHDN,
+        tim::vx::DataLayout::OcIcWHD);
 
     (*op).BindInputs(inputs);
     (*op).BindOutputs(outputs);
@@ -1979,18 +2032,23 @@ static const std::map<int, createIOpMapItemFunc> reg = {
         kTfLiteBuiltinSquare, SimpleOpMapper<tim::vx::ops::Square>, "Square"),
     REGISTER_OP_MAPPER(
         kTfLiteBuiltinFloor, SimpleOpMapper<tim::vx::ops::Floor>, "Floor"),
-    REGISTER_OP_MAPPER(
-        kTfLiteBuiltinFloorDiv, SimpleOpMapper<tim::vx::ops::FloorDiv>, "FloorDiv"),
-    REGISTER_OP_MAPPER(
-        kTfLiteBuiltinGreater, SimpleOpMapper<tim::vx::ops::Greater>, "Greater"),
-    REGISTER_OP_MAPPER(
-        kTfLiteBuiltinGreaterEqual, SimpleOpMapper<tim::vx::ops::GreaterOrEqual>, "GreaterEqual"),
+    REGISTER_OP_MAPPER(kTfLiteBuiltinFloorDiv,
+                       SimpleOpMapper<tim::vx::ops::FloorDiv>,
+                       "FloorDiv"),
+    REGISTER_OP_MAPPER(kTfLiteBuiltinGreater,
+                       SimpleOpMapper<tim::vx::ops::Greater>,
+                       "Greater"),
+    REGISTER_OP_MAPPER(kTfLiteBuiltinGreaterEqual,
+                       SimpleOpMapper<tim::vx::ops::GreaterOrEqual>,
+                       "GreaterEqual"),
     REGISTER_OP_MAPPER(
         kTfLiteBuiltinLess, SimpleOpMapper<tim::vx::ops::Less>, "Less"),
-    REGISTER_OP_MAPPER(
-        kTfLiteBuiltinLessEqual, SimpleOpMapper<tim::vx::ops::LessOrEqual>, "LessEqual"),
-    REGISTER_OP_MAPPER(
-        kTfLiteBuiltinNotEqual, SimpleOpMapper<tim::vx::ops::NotEqual>, "NotEqual"),
+    REGISTER_OP_MAPPER(kTfLiteBuiltinLessEqual,
+                       SimpleOpMapper<tim::vx::ops::LessOrEqual>,
+                       "LessEqual"),
+    REGISTER_OP_MAPPER(kTfLiteBuiltinNotEqual,
+                       SimpleOpMapper<tim::vx::ops::NotEqual>,
+                       "NotEqual"),
     REGISTER_OP_MAPPER(
         kTfLiteBuiltinEqual, SimpleOpMapper<tim::vx::ops::Equal>, "Equal"),
     REGISTER_OP_MAPPER(kTfLiteBuiltinLogicalNot,
