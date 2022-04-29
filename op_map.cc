@@ -802,6 +802,7 @@ struct ReshapeMapper : public OpMapperBase<TfLiteReshapeParams> {
     std::vector<int32_t> new_shape;
     uint32_t total_size = 1, negative_index = 0;
     std::vector<uint32_t> no_nagetive_shape;
+    bool do_shape_inference = false;
 
     // The new shape may be passed to reshape op by
     // builtin prarameters or inputs[1], the two formats should be handled.
@@ -825,11 +826,14 @@ struct ReshapeMapper : public OpMapperBase<TfLiteReshapeParams> {
         total_size /= new_shape.at(i);
         no_nagetive_shape.push_back(new_shape.at(i));
       } else {
+        do_shape_inference = true;
         negative_index = i;
         no_nagetive_shape.push_back(0);  //hold a place for changes to the value
       }
     }
-    no_nagetive_shape.at(negative_index) = total_size;
+    if (do_shape_inference) {
+      no_nagetive_shape.at(negative_index) = total_size;
+    }
 
     auto op = delegate->GetGraph()->CreateOperation<tim::vx::ops::Reshape>(
         no_nagetive_shape);
