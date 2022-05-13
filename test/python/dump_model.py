@@ -5,6 +5,7 @@ import json
 import os
 import shutil
 import model_cut
+import tflite_runtime.interpreter as tflite
 
 print(os.getpid())
 
@@ -29,9 +30,11 @@ if __name__ == '__main__':
       help='location of the model dump file'
     )
     parser.add_argument(
-      '-n',
-      '--num_node',
-      help='the number of nodes to be dumped'
+      '-t',
+      '--tensor_list',
+      default='',
+      help="the list of tensor to be dumped, if not supply, all tensor will be dumped"
+           "expect a list of number split by comma without space, for example: '16,32,38'"
     )
     args = parser.parse_args()
     with open(args.model, 'rb') as f:
@@ -43,7 +46,15 @@ if __name__ == '__main__':
     os.makedirs(dump_path + '/npu')
     dump_file = open(dump_path + "/summary.txt",'w')
 
-    for idx in range(int(args.num_node)):
+    tensor_list = list()
+    if args.tensor_list:
+        tensor_list = list(args.tensor_list.split(','))
+        tensor_list = [int(i) for i in tensor_list]
+    else:
+        interpreter = tflite.Interpreter(args.model)
+        tensor_list = range(interpreter._interpreter.NumTensors())
+
+    for idx in tensor_list:
         cuted_model = model_cut.buffer_change_output_tensor_to(model_buffer, idx)
         model_path = "/tmp/cutted_model.tflite"
         with open( model_path, 'wb') as g:
