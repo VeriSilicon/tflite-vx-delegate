@@ -828,7 +828,8 @@ struct ReshapeMapper : public OpMapperBase<TfLiteReshapeParams> {
       } else {
         do_shape_inference = true;
         negative_index = i;
-        no_nagetive_shape.push_back(0);  //hold a place for changes to the value
+        no_nagetive_shape.push_back(0);  // hold a place for changes to the
+                                         // value
       }
     }
     if (do_shape_inference) {
@@ -1560,6 +1561,29 @@ struct Space2Batch : public OpMapperBase<TfLiteSpaceToBatchNDParams> {
   }
 };
 
+struct ReverseV2 : public OpMapperBase<TfLiteReverseSequenceParams> {
+  bool HandleMapOp(vx::delegate::Delegate* delegate,
+                   std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
+                   std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
+                   const void* params) override {
+    TFLITE_LOG(TFLITE_LOG_INFO, "Create ReverseV2 op");
+    auto axis_tensor = inputs[1];
+    std::vector<int> axis(axis_tensor->GetShape()[0]);
+    axis_tensor->CopyDataFromTensor(axis.data());
+    axis.data()[0] = vx::delegate::utils::ConvertAxis(
+        axis.data()[0], inputs[0]->GetShape().size() + 1);
+
+    auto op =
+        delegate->GetGraph()->CreateOperation<tim::vx::ops::Reverse>(axis);
+
+    (*op).BindInput(inputs[0]).BindOutputs(outputs);
+
+    delegate->GetOps().push_back(std::move(op));
+
+    return true;
+  }
+};
+
 struct CustomOpMap : public OpMapperBase<EmptyStructPlaceholder> {
   virtual bool IsOpSupported(TfLiteContext* context,
                              TfLiteNode* node,
@@ -2105,6 +2129,7 @@ static const std::map<int, createIOpMapItemFunc> reg = {
     REGISTER_OP_MAPPER(kTfLiteBuiltinGatherNd, GatherNd),
     REGISTER_OP_MAPPER(kTfLiteBuiltinBatchToSpaceNd, Batch2Space),
     REGISTER_OP_MAPPER(kTfLiteBuiltinSpaceToBatchNd, Space2Batch),
+    REGISTER_OP_MAPPER(kTfLiteBuiltinReverseV2, ReverseV2),
     REGISTER_OP_MAPPER(kTfLiteBuiltinReduceMin,
                        ReduceOpMapper<tim::vx::ops::ReduceMin>,
                        "Min"),
