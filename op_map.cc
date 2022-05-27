@@ -280,10 +280,6 @@ struct OpMapperBase : public vx::op_map::IOpMapper {
       if (input_index < 0) {
         continue;
       }
-      // if (context->tensors[input_index].type == kTfLiteInt16) {
-      //   TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "Int16 input is not supported");
-      //   return false;
-      // }
       if (context->tensors[input_index].type == kTfLiteInt64) {
         TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "Int64 input is not supported");
         return false;
