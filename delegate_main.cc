@@ -658,7 +658,6 @@ TfLiteStatus Delegate::Invoke(const OpData& op_data,
     // TODO(derekjchow): Check result
     auto infered_input_tensor = layout_infered_.second[src_input_tensor];
     infered_input_tensor->CopyDataToTensor(const_cast<void*>(tensor_data));
-    break;  // temporary hack for sdd_lstm_int8.tflite
   }
 
   TFLITE_LOG(TFLITE_LOG_INFO, "Invoking graph");

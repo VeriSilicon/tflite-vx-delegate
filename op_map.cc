@@ -1497,25 +1497,26 @@ struct UnidirectionalSequenceLstm : public OpMapperBase<TfLiteUnidirectionalSequ
         cell_clip, proj_clip, act, forget_bias, time_major, recurrent_act_type, return_sequences);
     auto tensor_placeholder = delegate->GetGraph()->CreateTensorPlaceHolder();
 
-    // temporary hack for sdd_lstm_int8.tflite
-    auto origin_spec = inputs[14]->GetSpec();
-    origin_spec.datatype_ = tim::vx::DataType::FLOAT32;
-    origin_spec.quantization_.Type() = tim::vx::QuantType::NONE;
-    std::vector<float> init_data(20);
-    for (auto i = init_data.begin(); i != init_data.end(); ++i) {
-      *i = 0.f;
-    }
-    auto cell_tensor = delegate->GetGraph()->CreateTensor(origin_spec, init_data.data());
+    std::shared_ptr<tim::vx::Tensor> c_state_t = inputs[14];
+    std::shared_ptr<tim::vx::Tensor> h_state_t = inputs[13];
 
-    std::vector<uint8_t> fake_state_data(20);
-    memset(fake_state_data.data(), 0, 20);
-    inputs[13]->CopyDataToTensor(fake_state_data.data(), 20);
+    const auto target_dtype = tim::vx::DataType::FLOAT16;
+    if (c_state_t->GetSpec().datatype_ != target_dtype) {
+      auto dc_on_c = delegate->GetGraph()->CreateOperation<tim::vx::ops::DataConvert>();
+      (*dc_on_c).BindInput(c_state_t);
+
+      tim::vx::TensorSpec dc_out_tensor_spec = c_state_t->GetSpec();
+      dc_out_tensor_spec.datatype_ = target_dtype;
+      dc_out_tensor_spec.quantization_ = tim::vx::Quantization();
+      auto dc_out_tensor = delegate->GetGraph()->CreateTensor(dc_out_tensor_spec);
+      c_state_t = dc_out_tensor;
+      (*dc_on_c).BindOutput(dc_out_tensor);
+    }
 
     (*op).BindInputs({
       inputs[0],
-      inputs[13],    /*h_state*/
-      // inputs[14], /*c_state*/
-      cell_tensor,   // temporary hack for sdd_lstm_int8.tflite
+      h_state_t,
+      c_state_t,
       inputs[1],
       inputs[2],
       inputs[3],
