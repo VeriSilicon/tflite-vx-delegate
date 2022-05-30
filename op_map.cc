@@ -75,7 +75,7 @@ std::shared_ptr<tim::vx::Tensor> ProcessFusedActivation(
     case kTfLiteActRelu:
       op = delegate->GetGraph()->CreateOperation<tim::vx::ops::Relu>();
       break;
-    case kTfLiteBuiltinReluN1To1:
+    case kTfLiteActReluN1To1:
       op = delegate->GetGraph()->CreateOperation<tim::vx::ops::Relu1>();
       break;
     case kTfLiteActRelu6:
