@@ -2047,6 +2047,21 @@ struct ArgOpMapper : public OpMapperBase<EmptyStructPlaceholder> {
   std::string name_;
 
   ArgOpMapper(std::string name) : name_(name) {}
+  bool IsOpSupported(TfLiteContext* context,
+                     TfLiteNode* node,
+                     const TfLiteRegistration* registration) const override {
+    if (context->tensors[node->inputs->data[0]].type == kTfLiteInt8 &&
+        context->tensors[node->outputs->data[0]].type == kTfLiteInt32) {
+      TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "I8 input/I32 output is not supported");
+      return false;
+    }
+    if (0 == context->tensors[node->inputs->data[0]].dims->size ||
+        0 == context->tensors[node->outputs->data[0]].dims->size) {
+      TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "Arg cannot support dynamic shape");
+      return false;
+    }
+    return true;
+  }
   virtual bool HandleMapOp(
       vx::delegate::Delegate* delegate,
       std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
