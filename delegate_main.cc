@@ -374,7 +374,7 @@ TfLiteDelegate* Delegate::Create(const VxDelegateOptions* options) {
   DerivedDelegateData* delegate = new DerivedDelegateData();
   std::memset(delegate, 0, sizeof(DerivedDelegateData));
 
-  delegate->parent.flags = kTfLiteDelegateFlagsNone;
+  delegate->parent.flags = kTfLiteDelegateFlagsAllowDynamicTensors;
   delegate->parent.Prepare = &PrepareDelegate;
   delegate->parent.CopyFromBufferHandle = &CopyFromBufferHandle;
   delegate->parent.FreeBufferHandle = &FreeBufferHandle;
@@ -657,7 +657,13 @@ TfLiteStatus Delegate::Invoke(const OpData& op_data,
         reinterpret_cast<const void*>(tf_tensor.data.raw_const);
     // TODO(derekjchow): Check result
     auto infered_input_tensor = layout_infered_.second[src_input_tensor];
-    infered_input_tensor->CopyDataToTensor(const_cast<void*>(tensor_data));
+    if (infered_input_tensor) {
+      infered_input_tensor->CopyDataToTensor(const_cast<void*>(tensor_data));
+    } else {
+      TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
+                      "tensor in source graph removed before do layout "
+                      "inference - if zero sized tensor involved");
+    }
   }
 
   TFLITE_LOG(TFLITE_LOG_INFO, "Invoking graph");
@@ -676,9 +682,13 @@ TfLiteStatus Delegate::Invoke(const OpData& op_data,
     }
 
     void* tensor_data = reinterpret_cast<void*>(tf_tensor.data.raw);
-    // TODO(derekjchow): Check result
     auto infered_output_tesnor = layout_infered_.second[src_output_tensor];
-    infered_output_tesnor->CopyDataFromTensor(tensor_data);
+    if (infered_output_tesnor) {
+      infered_output_tesnor->CopyDataFromTensor(tensor_data);
+    }
+    else {
+      TFLITE_LOG(TFLITE_LOG_ERROR, "Output tensor missing: report issue to VSI");
+    }
   }
 
   // Copy output states to input states

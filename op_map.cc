@@ -736,7 +736,18 @@ struct ConcatenationMapper
     auto op = delegate->GetGraph()->CreateOperation<tim::vx::ops::Concat>(
         axis, inputs.size());
 
-    (*op).BindInputs(inputs);
+    // If input from dynamic graph, tensor may have shape with 0
+    std::vector<std::shared_ptr<tim::vx::Tensor>> none_zero_inputs;
+
+    for(const auto& in : inputs) {
+      if (in->GetSpec().GetElementNum() != 0) {
+        none_zero_inputs.push_back(in);
+      } else {
+        TFLITE_LOG(TFLITE_LOG_INFO, "Remove zero sized tensor from concat's input list");
+      }
+    }
+
+    (*op).BindInputs(none_zero_inputs);
     (*op).BindOutputs(outputs);
 
     delegate->GetOps().push_back(std::move(op));
@@ -1756,11 +1767,22 @@ struct Slice : public OpMapperBase<EmptyStructPlaceholder> {
                      TfLiteNode* node,
                      const TfLiteRegistration* registration) const override {
     int input_index = node->inputs->data[0];
+    int begin_index = node->inputs->data[1];
+    int len_index = node->inputs->data[2];
+
     int output_index = node->outputs->data[0];
     int input_dim_size = context->tensors[input_index].dims->size;
     int batch_in = context->tensors[input_index].dims->data[0];
     int batch_out = context->tensors[output_index].dims->data[0];
 
+    bool is_begin_dynamic = context->tensors[begin_index].allocation_type != kTfLiteMmapRo;
+    bool is_len_dynamic = context->tensors[len_index].allocation_type != kTfLiteMmapRo;
+
+
+    if( is_begin_dynamic || is_len_dynamic) {
+      TFLITE_LOG_PROD(TFLITE_LOG_INFO, "vx-delegate cannot support dynamic shaped operator(slice), fallback it to CPU");
+      return false;
+    }
     if (input_dim_size > 3 && (batch_in != batch_out)) {
       TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
                       "vx-delegate doesn't support slice in batch.");
