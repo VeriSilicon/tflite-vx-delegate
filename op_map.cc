@@ -403,6 +403,20 @@ struct SimpleOpWithFusedActiovationMapper
 
   SimpleOpWithFusedActiovationMapper(std::string name) : name_(name) {}
 
+  bool IsOpSupported(TfLiteContext* context,
+                     TfLiteNode* node,
+                     const TfLiteRegistration* registration) const override {
+    const auto builtin = reinterpret_cast<const T_Param*>(node->builtin_data);
+    if (builtin->activation == kTfLiteActReluN1To1 &&
+        context->tensors[node->inputs->data[0]].type == kTfLiteInt32 &&
+        context->tensors[node->outputs->data[0]].type == kTfLiteInt32) {
+      TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
+                      "I32 input/I32 output is not supported in Relu1.");
+      return false;
+    }
+    return true;
+  }
+
   bool HandleMapOp(vx::delegate::Delegate* delegate,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
