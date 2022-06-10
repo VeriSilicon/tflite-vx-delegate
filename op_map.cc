@@ -2002,6 +2002,29 @@ struct PackMapper : public OpMapperBase<TfLitePackParams> {
   }
 };
 
+struct UnpackMapper : public OpMapperBase<TfLiteUnpackParams> {
+  bool HandleMapOp(vx::delegate::Delegate* delegate,
+                   std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
+                   std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
+                   const void* params) override {
+    TFLITE_LOG(TFLITE_LOG_INFO, "Creating Unpack op");
+    const auto builtin = reinterpret_cast<const TfLiteUnpackParams*>(params);
+    uint32_t axis = vx::delegate::utils::ConvertAxis(
+        builtin->axis, inputs[0]->GetShape().size() + 1);
+    uint32_t num = builtin->num;
+    if(num==0){
+      num = inputs[0]->GetShape()[axis];
+    }
+    auto op = delegate->GetGraph()->CreateOperation<tim::vx::ops::Unstack>(
+        axis, num);
+    (*op).BindInputs(inputs);
+    (*op).BindOutputs(outputs);
+    delegate->GetOps().push_back(std::move(op));
+
+    return true;
+  }
+};
+
 struct OneHotMapper : public OpMapperBase<TfLiteOneHotParams> {
   bool IsOpSupported(TfLiteContext* context,
                      TfLiteNode* node,
@@ -2289,6 +2312,7 @@ static const std::map<int, createIOpMapItemFunc> reg = {
     REGISTER_OP_MAPPER(kTfLiteBuiltinSelect, Select),
     REGISTER_OP_MAPPER(kTfLiteBuiltinSelectV2, Select),
     REGISTER_OP_MAPPER(kTfLiteBuiltinPack, PackMapper),
+    REGISTER_OP_MAPPER(kTfLiteBuiltinUnpack, UnpackMapper),
     REGISTER_OP_MAPPER(
         kTfLiteBuiltinArgMin, ArgOpMapper<tim::vx::ops::ArgMin>, "Min"),
     REGISTER_OP_MAPPER(
