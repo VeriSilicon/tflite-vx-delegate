@@ -396,6 +396,26 @@ struct SimpleOpMapper : public OpMapperBase<EmptyStructPlaceholder> {
   }
 };
 
+template <typename T_OperationType>
+struct PowMapper : public SimpleOpMapper<T_OperationType> {
+
+  PowMapper(std::string name) : SimpleOpMapper<T_OperationType>(name) {}
+
+  bool IsOpSupported(TfLiteContext* context,
+                     TfLiteNode* node,
+                     const TfLiteRegistration* registration) const override {
+    auto input_tensor0 = context->tensors[node->inputs->data[0]];
+    auto input_tensor1 = context->tensors[node->inputs->data[1]];
+    if (input_tensor0.type == kTfLiteInt32 &&
+        input_tensor1.type == kTfLiteInt32) {
+      TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
+                      "I32 input/I32 output is not supported in pow.");
+      return false;
+    }
+    return true;
+  }
+};
+
 template <typename T_OperationType, typename T_Param>
 struct SimpleOpWithFusedActiovationMapper
     : public OpMapperBase<T_Param, FusedActivationAction<0, T_Param>> {
@@ -2225,7 +2245,7 @@ static const std::map<int, createIOpMapItemFunc> reg = {
     REGISTER_OP_MAPPER(kTfLiteBuiltinDiv, DivMapper, "Div"),
     REGISTER_OP_MAPPER(kTfLiteBuiltinMul, MulMapper, "Multiply"),
     REGISTER_OP_MAPPER(
-        kTfLiteBuiltinPow, SimpleOpMapper<tim::vx::ops::Pow>, "Pow"),
+        kTfLiteBuiltinPow, PowMapper<tim::vx::ops::Pow>, "Pow"),
     REGISTER_OP_MAPPER(kTfLiteBuiltinResizeNearestNeighbor,
                        ResizeMapper<tim::vx::ResizeType::NEAREST_NEIGHBOR>),
     REGISTER_OP_MAPPER(kTfLiteBuiltinResizeBilinear,
