@@ -1464,6 +1464,19 @@ struct Rnn : public OpMapperBase<TfLiteRNNParams> {
 };
 
 struct Gather : public OpMapperBase<TfLiteGatherParams> {
+  virtual bool IsOpSupported(TfLiteContext* context,
+                             TfLiteNode* node,
+                             const TfLiteRegistration* registration) const {
+    for (int i = 0; i < node->inputs->size; i++) {
+      int input_index = node->inputs->data[i];
+      if (context->tensors[input_index].type == kTfLiteString) {
+        TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
+                        "String input is not supported");
+        return false;
+      }
+    }
+    return true;
+  }
   bool HandleMapOp(vx::delegate::Delegate* delegate,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
@@ -1484,6 +1497,19 @@ struct Gather : public OpMapperBase<TfLiteGatherParams> {
 };
 
 struct GatherNd : public OpMapperBase<EmptyStructPlaceholder> {
+  virtual bool IsOpSupported(TfLiteContext* context,
+                             TfLiteNode* node,
+                             const TfLiteRegistration* registration) const {
+    for (int i = 0; i < node->inputs->size; i++) {
+      int input_index = node->inputs->data[i];
+      if (context->tensors[input_index].type == kTfLiteString) {
+        TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
+                        "String input is not supported");
+        return false;
+      }
+    }
+    return true;
+  }
   bool HandleMapOp(vx::delegate::Delegate* delegate,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
