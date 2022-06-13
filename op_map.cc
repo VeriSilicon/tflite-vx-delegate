@@ -2010,7 +2010,7 @@ struct UnpackMapper : public OpMapperBase<TfLiteUnpackParams> {
     TFLITE_LOG(TFLITE_LOG_INFO, "Creating Unpack op");
     const auto builtin = reinterpret_cast<const TfLiteUnpackParams*>(params);
     uint32_t axis = vx::delegate::utils::ConvertAxis(
-        builtin->axis, inputs[0]->GetShape().size() + 1);
+        builtin->axis, inputs[0]->GetShape().size());
     uint32_t num = builtin->num;
     if(num==0){
       num = inputs[0]->GetShape()[axis];
