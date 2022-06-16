@@ -427,6 +427,16 @@ struct SimpleOpWithFusedActiovationMapper
                      TfLiteNode* node,
                      const TfLiteRegistration* registration) const override {
     const auto builtin = reinterpret_cast<const T_Param*>(node->builtin_data);
+    auto in_tensor0 = context->tensors[node->inputs->data[0]];
+    auto out_tensor0 = context->tensors[node->outputs->data[0]];
+    if (in_tensor0.type == kTfLiteInt16 &&
+        (out_tensor0.type == kTfLiteUInt8 || out_tensor0.type == kTfLiteInt8) &&
+        in_tensor0.quantization.type == kTfLiteAffineQuantization &&
+        out_tensor0.quantization.type == kTfLiteAffineQuantization) {
+      TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
+                      "ASYM I16 input0 / ASYM U8/I8 output is not supported");
+      return false;
+    }
     if (builtin->activation == kTfLiteActReluN1To1 &&
         context->tensors[node->inputs->data[0]].type == kTfLiteInt32 &&
         context->tensors[node->outputs->data[0]].type == kTfLiteInt32) {
