@@ -62,7 +62,7 @@ endif()
 target_link_libraries(vx_delegate ${VX_DELEGATE_DEPENDENCIES})
 add_library(vx_custom_op STATIC ${VX_CUSTOM_OP_SRCS})
 target_include_directories(vx_custom_op PUBLIC ${PROJECT_SOURCE_DIR})
-target_link_libraries(vx_custom_op tensorflow-lite)
+target_link_libraries(vx_custom_op TensorFlow::tensorflow-lite)
 add_dependencies(vx_custom_op vx_delegate)
 
 set_target_properties(benchmark_model PROPERTIES INTERFACE_LINK_LIBRARIES vx_custom_op)
