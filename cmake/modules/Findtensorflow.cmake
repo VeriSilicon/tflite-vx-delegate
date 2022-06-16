@@ -32,6 +32,10 @@ endif()
 add_subdirectory("${tensorflow_SOURCE_DIR}/tensorflow/lite"
                  "${tensorflow_BINARY_DIR}")
 get_target_property(TFLITE_SOURCE_DIR tensorflow-lite SOURCE_DIR)
-list(APPEND VX_DELEGATE_DEPENDENCIES tensorflow-lite)
+
+add_library(TensorFlow::tensorflow-lite ALIAS tensorflow-lite)
+
+list(APPEND VX_DELEGATE_DEPENDENCIES TensorFlow::tensorflow-lite)
 list(APPEND VX_DELEGATES_SRCS ${TFLITE_SOURCE_DIR}/tools/command_line_flags.cc)
 list(APPEND VX_CUSTOM_OP_SRCS ${TFLITE_SOURCE_DIR}/delegates/external/external_delegate.cc)
+
