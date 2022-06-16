@@ -33,7 +33,21 @@ add_subdirectory("${tensorflow_SOURCE_DIR}/tensorflow/lite"
                  "${tensorflow_BINARY_DIR}")
 get_target_property(TFLITE_SOURCE_DIR tensorflow-lite SOURCE_DIR)
 
-add_library(TensorFlow::tensorflow-lite ALIAS tensorflow-lite)
+if(TFLITE_LIB_LOC)
+  message(STATUS "Will use prebuild tensorflow lite library from ${TFLITE_LIB_LOC}")
+  if(NOT EXISTS ${TFLITE_LIB_LOC})
+    message(FATAL_ERROR "tensorflow-lite library not found: ${TFLITE_LIB_LOC}")
+  endif()
+  add_library(TensorFlow::tensorflow-lite UNKNOWN IMPORTED)
+  set_target_properties(TensorFlow::tensorflow-lite PROPERTIES
+    IMPORTED_LOCATION ${TFLITE_LIB_LOC}
+    INTERFACE_INCLUDE_DIRECTORIES $<TARGET_PROPERTY:tensorflow-lite,INTERFACE_INCLUDE_DIRECTORIES>
+  )
+  set_target_properties(tensorflow-lite PROPERTIES EXCLUDE_FROM_ALL TRUE)
+else()
+  add_library(TensorFlow::tensorflow-lite ALIAS tensorflow-lite)
+endif()
+
 
 list(APPEND VX_DELEGATE_DEPENDENCIES TensorFlow::tensorflow-lite)
 list(APPEND VX_DELEGATES_SRCS ${TFLITE_SOURCE_DIR}/tools/command_line_flags.cc)
