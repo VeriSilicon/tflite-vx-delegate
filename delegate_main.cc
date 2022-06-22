@@ -374,7 +374,7 @@ TfLiteDelegate* Delegate::Create(const VxDelegateOptions* options) {
   DerivedDelegateData* delegate = new DerivedDelegateData();
   std::memset(delegate, 0, sizeof(DerivedDelegateData));
 
-  delegate->parent.flags = kTfLiteDelegateFlagsAllowDynamicTensors;
+  delegate->parent.flags = kTfLiteDelegateFlagsAllowDynamicTensors | kTfLiteDelegateFlagsRequirePropagatedShapes;
   delegate->parent.Prepare = &PrepareDelegate;
   delegate->parent.CopyFromBufferHandle = &CopyFromBufferHandle;
   delegate->parent.FreeBufferHandle = &FreeBufferHandle;
