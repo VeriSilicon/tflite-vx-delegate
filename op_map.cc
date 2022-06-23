@@ -586,6 +586,13 @@ struct Conv2dMapper : public Conv2dKind<TfLiteConvParams> {
                       "hybrid data type is not supported in conv2d.");
       return false;
     }
+    bool is_grouped = (input_tensor.dims->data[3] != weight_tensor.dims->data[3]);
+    bool is_batched = (input_tensor.dims->data[0] != 1);
+    if (is_grouped && is_batched) {
+      TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
+                      "batch is not supported in grouped conv2d.");
+      return false;
+    }
     return true;
   }
 
@@ -593,23 +600,36 @@ struct Conv2dMapper : public Conv2dKind<TfLiteConvParams> {
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
                    const void* params) override {
-    TFLITE_LOG(TFLITE_LOG_INFO, "Creating Conv2d op");
-    const auto builtin = reinterpret_cast<const TfLiteConvParams*>(params);
-
+    // input layout CWHN, weight layout IWHO
+    uint32_t groups = inputs[0]->GetShape()[0] / inputs[1]->GetShape()[0];
     uint32_t weights = inputs[1]->GetShape()[3];
     uint32_t kernel_h = inputs[1]->GetShape()[2];
     uint32_t kernel_w = inputs[1]->GetShape()[1];
-
-    auto op = delegate->GetGraph()->CreateOperation<tim::vx::ops::Conv2d>(
-        static_cast<int32_t>(weights),
-        TflitePadTypeToVsiPadType(builtin->padding),
-        std::array<uint32_t, 2>({kernel_w, kernel_h}),
-        std::array<uint32_t, 2>(
-            {builtin->stride_width, builtin->stride_height}),
-        std::array<uint32_t, 2>(
-            {builtin->dilation_width_factor, builtin->dilation_height_factor}),
-        0,
-        tim::vx::DataLayout::CWHN);
+    const auto builtin = reinterpret_cast<const TfLiteConvParams*>(params);
+    std::shared_ptr<tim::vx::DirectMapOp> op;
+    if (inputs[0]->GetShape()[0] == inputs[1]->GetShape()[0]) {
+      TFLITE_LOG(TFLITE_LOG_INFO, "Creating Conv2d op");
+      op = delegate->GetGraph()->CreateOperation<tim::vx::ops::Conv2d>(
+          static_cast<int32_t>(weights),
+          TflitePadTypeToVsiPadType(builtin->padding),
+          std::array<uint32_t, 2>({kernel_w, kernel_h}),
+          std::array<uint32_t, 2>(
+              {builtin->stride_width, builtin->stride_height}),
+          std::array<uint32_t, 2>({builtin->dilation_width_factor,
+                                   builtin->dilation_height_factor}),
+          0,
+          tim::vx::DataLayout::CWHN);
+    } else {
+      TFLITE_LOG(TFLITE_LOG_INFO, "Creating Grouped Conv2d op");
+      op = delegate->GetGraph()->CreateOperation<tim::vx::ops::GroupedConv2d>(
+          TflitePadTypeToVsiPadType(builtin->padding),
+          std::array<uint32_t, 2>(
+              {builtin->stride_width, builtin->stride_height}),
+          std::array<uint32_t, 2>({builtin->dilation_width_factor,
+                                   builtin->dilation_height_factor}),
+          groups,
+          tim::vx::DataLayout::CWHN);
+    }
 
     (*op).BindInputs(inputs);
     (*op).BindOutputs(outputs);
