@@ -1032,6 +1032,16 @@ struct StridedSliceMapper : public OpMapperBase<TfLiteStridedSliceParams> {
 };
 
 struct PadMapper : public OpMapperBase<EmptyStructPlaceholder> {
+  virtual bool IsOpSupported(TfLiteContext* context,
+                             TfLiteNode* node,
+                             const TfLiteRegistration* registration) const {
+
+    if(0 == context->tensors[node->outputs->data[0]].dims->size){
+      TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "Pad cannot support dynamic shape");
+      return false;
+    }
+    return true;
+  }
   bool HandleMapOp(vx::delegate::Delegate* delegate,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
