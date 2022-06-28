@@ -621,6 +621,17 @@ struct Conv2dMapper : public Conv2dKind<TfLiteConvParams> {
 };
 
 struct TransposeConvMapper : public OpMapperBase<TfLiteTransposeConvParams> {
+  virtual bool IsOpSupported(TfLiteContext* context,
+                             TfLiteNode* node,
+                             const TfLiteRegistration* registration) const {
+    auto output_tensor = context->tensors[node->outputs->data[0]];
+
+    if (0 == output_tensor.dims->size) {
+      TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "transpose conv cannot support dynamic shape");
+      return false;
+    }
+    return true;
+  }
   bool HandleMapOp(vx::delegate::Delegate* delegate,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
@@ -638,13 +649,11 @@ struct TransposeConvMapper : public OpMapperBase<TfLiteTransposeConvParams> {
     uint32_t input_width = inputs[2]->GetShape()[1];
     uint32_t input_height = inputs[2]->GetShape()[2];
     uint32_t ksize_width = inputs[1]->GetShape()[1];
-    ;
     uint32_t ksize_height = inputs[1]->GetShape()[2];
-    ;
     uint32_t weights = inputs[1]->GetShape()[3];
     int32_t pad_left_inter = static_cast<int32_t>(
         ksize_width + stride_width * (input_width - 1) - output_shape[2]);
-    uint32_t pad_left = pad_left_inter;
+    uint32_t pad_left = pad_left_inter / 2;
     uint32_t pad_right = pad_left_inter - pad_left;
     int32_t pad_top_inter = static_cast<int32_t>(
         ksize_height + stride_height * (input_height - 1) - output_shape[1]);
