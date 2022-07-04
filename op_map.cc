@@ -1427,6 +1427,17 @@ struct PreluMapper : public OpMapperBase<EmptyStructPlaceholder> {
 };
 
 struct Transpose : public OpMapperBase<TfLiteTransposeParams> {
+  virtual bool IsOpSupported(TfLiteContext* context,
+                             TfLiteNode* node,
+                             const TfLiteRegistration* registration) const {
+    int output_index = node->outputs->data[0];
+    if (context->tensors[output_index].dims->size == 0){
+      TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
+                        "Dynamic shape is not supported in transpose");
+        return false;
+    }
+    return true;
+  }
   bool HandleMapOp(vx::delegate::Delegate* delegate,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
@@ -1440,7 +1451,7 @@ struct Transpose : public OpMapperBase<TfLiteTransposeParams> {
     auto op = delegate->GetGraph()->CreateOperation<tim::vx::ops::Transpose>(
         ovx_perm);
 
-    (*op).BindInputs(inputs);
+    (*op).BindInput(inputs[0]);
     (*op).BindOutputs(outputs);
 
     delegate->GetOps().push_back(std::move(op));
