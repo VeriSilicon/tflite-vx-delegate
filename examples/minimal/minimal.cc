@@ -223,15 +223,15 @@ int main(int argc, char* argv[]) {
   TFLITE_MINIMAL_CHECK(npu_interpreter->Invoke() == kTfLiteOk);
 
   // Get performance
-  {
-    const uint32_t loop_cout = 10;
-    auto start = std::chrono::high_resolution_clock::now();
-    for (uint32_t i = 0; i < loop_cout; i++) {
-      npu_interpreter->Invoke();
-    }
-    auto end = std::chrono::high_resolution_clock::now();
-    std::cout << "[NPU Performance] Run " << loop_cout << " times, average time: " << (end - start).count() << " ms" << std::endl;
-  }
+  // {
+  //   const uint32_t loop_cout = 10;
+  //   auto start = std::chrono::high_resolution_clock::now();
+  //   for (uint32_t i = 0; i < loop_cout; i++) {
+  //     npu_interpreter->Invoke();
+  //   }
+  //   auto end = std::chrono::high_resolution_clock::now();
+  //   std::cout << "[NPU Performance] Run " << loop_cout << " times, average time: " << (end - start).count() << " ms" << std::endl;
+  // }
 
   printf("\n\n=== Post-invoke Interpreter State ===\n");
   tflite::PrintInterpreterState(npu_interpreter.get());
@@ -258,15 +258,15 @@ int main(int argc, char* argv[]) {
   TFLITE_MINIMAL_CHECK(cpu_interpreter->Invoke() == kTfLiteOk);
 
   // Get performance
-  {
-    const uint32_t loop_cout = 10;
-    auto start = std::chrono::high_resolution_clock::now();
-    for (uint32_t i = 0; i < loop_cout; i++) {
-      cpu_interpreter->Invoke();
-    }
-    auto end = std::chrono::high_resolution_clock::now();
-    std::cout << "[CPU Performance] Run " << loop_cout << " times, average time: " << (end - start).count() << " ms" << std::endl;
-  }
+  // {
+  //   const uint32_t loop_cout = 10;
+  //   auto start = std::chrono::high_resolution_clock::now();
+  //   for (uint32_t i = 0; i < loop_cout; i++) {
+  //     cpu_interpreter->Invoke();
+  //   }
+  //   auto end = std::chrono::high_resolution_clock::now();
+  //   std::cout << "[CPU Performance] Run " << loop_cout << " times, average time: " << (end - start).count() << " ms" << std::endl;
+  // }
 
   printf("\n\n=== Post-invoke CPU Interpreter State ===\n");
   tflite::PrintInterpreterState(cpu_interpreter.get());
