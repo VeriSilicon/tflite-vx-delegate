@@ -1793,6 +1793,12 @@ struct Space2Batch : public OpMapperBase<TfLiteSpaceToBatchNDParams> {
                       "space2batch in vx-delegate only support 4D input");
       return false;
     }
+    int output_index = node->outputs->data[0];
+    if(context->tensors[output_index].dims->size == 0){
+      TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
+                      "dynamic shape in not support in space2batch");
+      return false;
+    }
     int block_index = node->inputs->data[1];
     if (context->tensors[block_index].dims->data[0] != 2) {
       TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
