@@ -19,6 +19,9 @@
 #    DEALINGS IN THE SOFTWARE.
 #
 cmake_minimum_required(VERSION 3.16)
+
+option(TFLITE_ENABLE_MULTI_DEVICE       "Enable multi devices support"          OFF)
+
 if(NOT CMAKE_BUILD_TYPE)
   message(STATUS "Setting build type to Release, for debug builds use"
     "'-DCMAKE_BUILD_TYPE=Debug'.")
@@ -69,3 +72,4 @@ set_target_properties(benchmark_model PROPERTIES INTERFACE_LINK_LIBRARIES vx_cus
 set_target_properties(label_image PROPERTIES INTERFACE_LINK_LIBRARIES vx_custom_op)
 
 add_subdirectory(examples/minimal)
+add_subdirectory(examples/multi_device)

@@ -14,10 +14,10 @@
 # limitations under the License.
 
 
-# Builds the minimal Tensorflow Lite example.
+# Builds the multi_device Tensorflow Lite example.
 
 #cmake_minimum_required(VERSION 3.16)
-#project(minimal C CXX)
+#project(multi_device C CXX)
 
 set(TENSORFLOW_SOURCE_DIR "" CACHE PATH
   "Directory that contains the TensorFlow project"
@@ -32,18 +32,18 @@ endif()
 include_directories(${TFLITE_SOURCE_DIR}/delegates/external)
 
 set(CMAKE_CXX_STANDARD 11)
-add_executable(minimal
-  minimal.cc
+add_executable(multi_device
+  multi_device.cc
 )
-target_link_libraries(minimal
-  TensorFlow::tensorflow-lite
+target_link_libraries(multi_device
+  tensorflow-lite
   vx_custom_op
   vx_delegate
   ${CMAKE_DL_LIBS}
 )
 
 if(ANDROID_TOOLCHAIN)
-  target_link_libraries(minimal
+  target_link_libraries(multi_device
     log
   )
 endif()

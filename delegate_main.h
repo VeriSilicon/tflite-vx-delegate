@@ -37,10 +37,14 @@
 #include "tensorflow/lite/builtin_op_data.h"
 #include "tensorflow/lite/builtin_ops.h"
 #include "tensorflow/lite/context.h"
+#include "tensorflow/lite/interpreter.h"
 #include "tim/vx/context.h"
 #include "tim/vx/graph.h"
 #include "tim/vx/operation.h"
 #include "tim/vx/tensor.h"
+
+#include "tim/vx/platform/platform.h"
+#include "tim/vx/platform/native.h"
 
 namespace vx {
 namespace delegate {
@@ -48,6 +52,12 @@ namespace delegate {
 typedef struct {
   //Allowed save or load nbg binary
   bool allowed_cache_mode;
+  //Allowed run multi device mode
+  bool allowed_multi_device_mode;
+  //Store model location
+  std::string model_location;
+  //Device in multi device mode
+  int32_t device_id;
   //nbg binary path
   std::string cache_file_path;
   // Allowed ops to delegate.
@@ -74,6 +84,9 @@ struct OpData {
 struct DerivedDelegateData {
     TfLiteDelegate parent;
     bool allow_cache_mode;
+    bool allow_multi_device_mode;
+    std::string model_location;
+    int32_t device_id;
     std::string cache_path;
 };
 
@@ -121,6 +134,12 @@ class Delegate {
   };
 
   std::shared_ptr<tim::vx::Context> context_;
+  std::vector<std::shared_ptr<tim::vx::platform::IDevice>> devices_;
+  std::shared_ptr<tim::vx::platform::IExecutor> executor_;
+  std::shared_ptr<tim::vx::platform::IExecutable> executable_;
+  std::vector<std::shared_ptr<tim::vx::platform::ITensorHandle>> inputs_;
+  std::vector<std::shared_ptr<tim::vx::platform::ITensorHandle>> outputs_;
+
   std::shared_ptr<tim::vx::Graph> graph_;
   //first: layout infered graph; second: map from src_tensor to infered_tensor.
   std::pair<std::shared_ptr<tim::vx::Graph>,
@@ -134,6 +153,9 @@ class Delegate {
   bool compiled_;
 
   absl::optional<bool> is_cache_present_;
+  absl::optional<bool> is_multi_device_;
+  uint32_t device_id_;
+
   size_t nbg_size_;
   std::fstream fs_;
 };
