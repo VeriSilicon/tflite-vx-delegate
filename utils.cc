@@ -109,7 +109,129 @@ void GenerateWeightDataForNearest(float* data,
   return;
 }
 
+std::vector<uint8_t> read_data(const char * filename, size_t required)
+{
+    static std::map<std::string, std::vector<uint8_t>> cached_data;
 
+    if (cached_data.find(filename) != cached_data.end()) {
+      return cached_data[filename];
+    }
+    // open the file:
+    std::ifstream file(filename, std::ios::binary);
+
+    // Stop eating new lines in binary mode!!!
+    file.unsetf(std::ios::skipws);
+
+    // reserve capacity not change size, memory copy in setInput will fail, so use resize()
+    std::vector<uint8_t> vec;
+    vec.resize(required);
+
+    // read the data:
+    file.read(reinterpret_cast<char *>(vec.data()), required);
+
+    cached_data.insert(std::make_pair(std::string(filename), vec));
+    return vec;
+}
+
+std::vector<uint32_t> string_to_int(std::string string)
+{
+	std::vector <uint32_t> nums;
+
+	int len_s = string.size();
+	int i=0, j=0;
+	while (i < len_s)
+	{
+		if (string[i] >= '0'&& string[i] <= '9')
+		{
+			j = i;
+			int len = 0;
+			while (string[i] >= '0'&& string[i] <= '9')
+			{
+				i++;
+				len++;
+			}
+			std::string s0 = string.substr(j, len);
+            int num=0;
+			std::stringstream s1(s0);
+			s1 >> num;
+			nums.push_back(num);
+		}
+		else
+		{
+			i++;
+		}
+	}
+	return nums;
+}
+
+void UnpackConfig(const char* filename,
+                   std::vector<std::string>& model_locations,
+                   std::vector<uint32_t>& model_num,
+                   std::vector<uint32_t>& devs_id,
+                   std::vector<std::vector<std::string>>& inputs_datas) {
+  std::ifstream file(filename);
+
+  if (!file.is_open()) {
+    std::cout << "can not fine this file " << std::endl;
+    assert(true);
+    return;
+  } else {
+    std::string string_line;
+    while (getline(file, string_line)) {
+      if (string_line.empty()) continue;
+      char* strs = new char[string_line.length() + 1];
+      strcpy(strs, string_line.c_str());
+
+      char* delim = (char*)" ";
+      char* p = strtok(strs, delim);
+
+      if (p) {
+        std::string s = p;
+        model_locations.push_back(s);
+        p = strtok(NULL, delim);
+      } else {
+        std::cout << "wrong model location format in config.txt " << std::endl;
+        assert(true);
+        return;
+      }
+
+      if (p) {
+        model_num.push_back(atoi(p));
+        p = strtok(NULL, delim);
+      } else {
+        std::cout << "wrong model number format in config.txt" << std::endl;
+        assert(true);
+        return;
+      }
+
+      if (p) {
+        std::string s = p;
+        auto nums = string_to_int(s);
+        devs_id.push_back(nums[0]);
+        p = strtok(NULL, delim);
+      } else {
+        std::cout << "wrong device Id format in config.txt" << std::endl;
+        assert(true);
+        return;
+      }
+
+      std::vector<std::string> input_datas;
+      while(p) {
+        std::string s = p;
+        if (s == "NULL") {
+          input_datas.push_back("");
+          std::cout << "Using ramdom input data" << std::endl;
+          break;
+        } else {
+          input_datas.push_back(s);
+          p = strtok(NULL, delim);
+        }
+      }
+      inputs_datas.push_back(input_datas);
+    }
+  }
+  return;
+}
 
 }  // namespace utils
 }  // namespace delegate

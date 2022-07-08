@@ -69,3 +69,4 @@ set_target_properties(benchmark_model PROPERTIES INTERFACE_LINK_LIBRARIES vx_cus
 set_target_properties(label_image PROPERTIES INTERFACE_LINK_LIBRARIES vx_custom_op)
 
 add_subdirectory(examples/minimal)
+add_subdirectory(examples/multi_device)

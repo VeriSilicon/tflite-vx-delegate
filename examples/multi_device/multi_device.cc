@@ -20,6 +20,11 @@ limitations under the License.
 #include <thread>
 #include <chrono>
 #include <map>
+#include <stdlib.h>
+#include <iostream>
+#include <functional>
+#include <string>
+
 #include "tensorflow/lite/interpreter.h"
 #include "tensorflow/lite/kernels/register.h"
 #include "tensorflow/lite/model.h"
@@ -27,40 +32,33 @@ limitations under the License.
 
 #include "tensorflow/lite/delegates/external/external_delegate.h"
 #include "vsi_npu_custom_op.h"
+
 #include "utils.h"
 
-// This is an example that is minimal to read a model
+// This is an example that is multi device to run model
 // from disk and perform inference. There is no data being loaded
 // that is up to you to add as a user.
 //
 // NOTE: Do not add any dependencies to this that cannot be built with
-// the minimal makefile. This example must remain trivial to build with
-// the minimal build tool.
+// the multi device makefile. This example must remain trivial to build with
+// the multi device build tool.
 //
-// Usage: minimal <tflite model>
+// Usage: multi_device <vxdelegate.so> <config path>
 
-void setupInput(int argc,
-                char* argv[],
-                const std::unique_ptr<tflite::Interpreter>& interpreter,
-                bool is_cache_mode) {
+
+void setupInput(std::vector<std::string> input_files,
+                const std::unique_ptr<tflite::Interpreter>& interpreter) {
   auto input_list = interpreter->inputs();
   bool use_random_input = false;
-
-  if ((!is_cache_mode && input_list.size() != argc - 4) ||
-      (is_cache_mode && input_list.size() != argc - 6)) {
-    std::cout << "Warning: input count not match between command line and "
-                 "model -> generate random data for inputs"
-              << std::endl;
+  if(input_files.size() == 1 && input_files[0].size() == 0){
     use_random_input = true;
   }
-  uint32_t i = is_cache_mode ? 6 : 4;
-  //uint32_t i = 4; // argv index
 
   for (auto input_idx = 0; input_idx < input_list.size(); input_idx++) {
     auto in_tensor = interpreter->input_tensor(input_idx);
 
     std::cout << "Setup intput[" << std::string(interpreter->GetInputName(input_idx)) << "]" << std::endl;
-    const char* input_data =  use_random_input ? "/dev/urandom" : argv[i];
+    const char* input_data =  use_random_input ? "/dev/urandom" : input_files[input_idx].c_str();
 
     if (!use_random_input) {
       // get its size:
@@ -101,88 +99,48 @@ void setupInput(int argc,
         break;
       }
     }
-
-    i += 1;
   }
 }
 
-int main(int argc, char* argv[]) {
-  if (argc <= 2) {
-    fprintf(stderr, "minimal <external_delegate.so> <tflite model> <use_cache_mode> <cache file> <inputs>\n");
-    return 1;
-  }
-  const char* delegate_so = argv[1];
-  const char* filename = argv[2];
-  bool is_use_cache_mode = false;
-  const char* cachename;
-  if(argc >= 5){
-    int is_match = std::strcmp(argv[3],"use_cache_mode");
-    if(is_match == 0){
-      is_use_cache_mode = true;
-      cachename = argv[4];
-    }
-  }
-
-  // Load model
+void runSingleWork(const char* model_location, uint32_t device_id, std::vector<std::string> input_files,const char* lib_path) {
   std::unique_ptr<tflite::FlatBufferModel> model =
-      tflite::FlatBufferModel::BuildFromFile(filename);
+      tflite::FlatBufferModel::BuildFromFile(model_location);
   TFLITE_EXAMPLE_CHECK(model != nullptr);
+  auto ext_delegate_option = TfLiteExternalDelegateOptionsDefault(lib_path);
+  const char* allow_multi_device_key = "allowed_multi_device_mode";
+  const char* allow_multi_device_value = "true";
+  const char* device_id_key = "device_id";
+  const char* device_id_value = std::to_string(device_id).c_str();
+  const char* model_localtion_key = "model_location";
+  const char* model_location_value = model_location;
 
-  auto ext_delegate_option = TfLiteExternalDelegateOptionsDefault(argv[1]);
-  if(is_use_cache_mode){
-    const char* allow_cache_key = "allowed_cache_mode";
-    const char* allow_cache_value = "true";
-    const char* cache_file_key = "cache_file_path";
-    const char* cache_file_value = cachename;
-    ext_delegate_option.insert(&ext_delegate_option,allow_cache_key,allow_cache_value);
-    ext_delegate_option.insert(&ext_delegate_option,cache_file_key,cache_file_value);
-  }
-
+  ext_delegate_option.insert(
+      &ext_delegate_option, allow_multi_device_key, allow_multi_device_value);
+  ext_delegate_option.insert(
+      &ext_delegate_option, device_id_key, device_id_value);
+  ext_delegate_option.insert(
+      &ext_delegate_option, model_localtion_key, model_location_value);
   auto ext_delegate_ptr = TfLiteExternalDelegateCreate(&ext_delegate_option);
 
-  // Build the interpreter with the InterpreterBuilder.
-  // Note: all Interpreters should be built with the InterpreterBuilder,
-  // which allocates memory for the Interpreter and does various set up
-  // tasks so that the Interpreter can read the provided model.
   tflite::ops::builtin::BuiltinOpResolver resolver;
-  resolver.AddCustom(kNbgCustomOp, tflite::ops::custom::Register_VSI_NPU_PRECOMPILED());
 
   tflite::InterpreterBuilder builder(*model, resolver);
   std::unique_ptr<tflite::Interpreter> npu_interpreter;
   builder(&npu_interpreter);
+
   TFLITE_EXAMPLE_CHECK(npu_interpreter != nullptr);
   npu_interpreter->ModifyGraphWithDelegate(ext_delegate_ptr);
 
-  // Allocate tensor buffers.
   TFLITE_EXAMPLE_CHECK(npu_interpreter->AllocateTensors() == kTfLiteOk);
-  printf("=== Pre-invoke Interpreter State ===\n");
-  tflite::PrintInterpreterState(npu_interpreter.get());
 
-  // Fill input buffers
-  // TODO(user): Insert code to fill input tensors.
-  // Note: The buffer of the input tensor with index `i` of type T can
-  // be accessed with `T* input = interpreter->typed_input_tensor<T>(i);`
-
-  setupInput(argc, argv, npu_interpreter,is_use_cache_mode);
-
-  // Run inference
+  setupInput(input_files, npu_interpreter);
+  
   TFLITE_EXAMPLE_CHECK(npu_interpreter->Invoke() == kTfLiteOk);
-
-  // Get performance
-  // {
-  //   const uint32_t loop_cout = 10;
-  //   auto start = std::chrono::high_resolution_clock::now();
-  //   for (uint32_t i = 0; i < loop_cout; i++) {
-  //     npu_interpreter->Invoke();
-  //   }
-  //   auto end = std::chrono::high_resolution_clock::now();
-  //   std::cout << "[NPU Performance] Run " << loop_cout << " times, average time: " << (end - start).count() << " ms" << std::endl;
-  // }
-
+  
   printf("\n\n=== Post-invoke Interpreter State ===\n");
   tflite::PrintInterpreterState(npu_interpreter.get());
 
-  // CPU
+// CPU
   tflite::ops::builtin::BuiltinOpResolver cpu_resolver;
   tflite::InterpreterBuilder cpu_builder(*model, cpu_resolver);
   std::unique_ptr<tflite::Interpreter> cpu_interpreter;
@@ -195,24 +153,10 @@ int main(int argc, char* argv[]) {
   tflite::PrintInterpreterState(cpu_interpreter.get());
 
   // Fill input buffers
-  // TODO(user): Insert code to fill input tensors.
-  // Note: The buffer of the input tensor with index `i` of type T can
-  // be accessed with `T* input = interpreter->typed_input_tensor<T>(i);`
-  setupInput(argc, argv, cpu_interpreter,is_use_cache_mode);
+  setupInput(input_files, cpu_interpreter);
 
   // Run inference
   TFLITE_EXAMPLE_CHECK(cpu_interpreter->Invoke() == kTfLiteOk);
-
-  // Get performance
-  // {
-  //   const uint32_t loop_cout = 10;
-  //   auto start = std::chrono::high_resolution_clock::now();
-  //   for (uint32_t i = 0; i < loop_cout; i++) {
-  //     cpu_interpreter->Invoke();
-  //   }
-  //   auto end = std::chrono::high_resolution_clock::now();
-  //   std::cout << "[CPU Performance] Run " << loop_cout << " times, average time: " << (end - start).count() << " ms" << std::endl;
-  // }
 
   printf("\n\n=== Post-invoke CPU Interpreter State ===\n");
   tflite::PrintInterpreterState(cpu_interpreter.get());
@@ -325,5 +269,31 @@ int main(int argc, char* argv[]) {
   }
 
   TfLiteExternalDelegateDelete(ext_delegate_ptr);
+}
+
+int main(int argc, char* argv[]) {
+  if (argc != 3) {
+    fprintf(stderr,
+            "multi device demo <external_delegate.so> <config.txt file>\n");
+    return 1;
+  }
+
+  const char* delegate_so = argv[1];
+  const char* configfile = argv[2];
+
+  std::vector<std::string> model_locations;
+  std::vector<uint32_t> repeat_num;
+  std::vector<uint32_t> devs_id;
+  std::vector<std::vector<std::string>> inputs_data_files;
+  vx::delegate::utils::UnpackConfig(
+      configfile, model_locations, repeat_num, devs_id, inputs_data_files);
+
+  for (size_t i = 0; i < model_locations.size(); i++) {
+    for (size_t j = 0; j < repeat_num[i]; j++)
+      runSingleWork(model_locations[i].c_str(),
+                    devs_id[i],
+                    inputs_data_files[i],
+                    argv[1]);
+  }
   return 0;
 }

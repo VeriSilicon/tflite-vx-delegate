@@ -28,6 +28,9 @@
 #include <vector>
 #include <limits>
 #include <cmath>
+#include <sstream>
+#include <cstring>
+#include <cstdio>
 #include "delegate_main.h"
 
 namespace vx {
@@ -84,6 +87,46 @@ inline void Quantize(const std::vector<float>& data, float scale,
         std::min<float>(std::numeric_limits<T>::max(),
                         std::round(zero_point + (f / scale))))));
   }
+}
+
+#define TFLITE_EXAMPLE_CHECK(x)                              \
+  if (!(x)) {                                                \
+    fprintf(stderr, "Error at %s:%d\n", __FILE__, __LINE__); \
+    exit(1);                                                 \
+  }
+
+std::vector<uint8_t> read_data(const char * filename, size_t required);
+
+std::vector<uint32_t> string_to_int(std::string string);
+
+void UnpackConfig(const char* filename,
+                   std::vector<std::string>& model_locations,
+                   std::vector<uint32_t>& model_num,
+                   std::vector<uint32_t>& devs_id,
+                   std::vector<std::vector<std::string>>& inputs_datas);
+
+template< typename T>
+float cosine(const std::vector<T>& lhs, const std::vector<T>& rhs) {
+  auto calc_m = [](const std::vector<T>& lhs) {
+    float lhs_m = 0.0f;
+
+    for(auto iter = lhs.begin(); iter != lhs.end(); ++iter) {
+      lhs_m += *iter * (*iter);
+    }
+    lhs_m = std::sqrt(lhs_m);
+
+    return lhs_m;
+  };
+
+  auto lhs_m = calc_m(lhs);
+  auto rhs_m = calc_m(rhs);
+
+  float element_sum = 0.f;
+  for(auto i = 0U; i < lhs.size(); ++i) {
+    element_sum += lhs[i]*rhs[i];
+  }
+
+  return element_sum/(lhs_m*rhs_m);
 }
 
 }  // namespace utils
