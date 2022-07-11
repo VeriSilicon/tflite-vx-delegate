@@ -578,18 +578,18 @@ TfLiteStatus Delegate::Invoke(const OpData& op_data,
         }
         else if (-1 == tensor_idx && builtin_code == 44){
           // -1 means placeholder for optional inputs: for example LSTM
-          if (tensors_.find(placeholder_tensor_idx) != tensors_.end()) {
+          if (tensors_.find(placeholder_tensor_idx_) != tensors_.end()) {
             // Assert(false);
           }
-          tensors_[placeholder_tensor_idx] = graph_->CreateTensorPlaceHolder();
+          tensors_[placeholder_tensor_idx_] = graph_->CreateTensorPlaceHolder();
 
           if (port_idx < inputs.size()) {
-            inputs[port_idx] = placeholder_tensor_idx;
+            inputs[port_idx] = placeholder_tensor_idx_;
           } else {
-            outputs[port_idx - inputs.size()] = placeholder_tensor_idx;
+            outputs[port_idx - inputs.size()] = placeholder_tensor_idx_;
           }
 
-          placeholder_tensor_idx --;
+          placeholder_tensor_idx_ --;
         }
       }
 

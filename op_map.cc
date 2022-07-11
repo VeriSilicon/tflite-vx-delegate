@@ -104,10 +104,10 @@ std::shared_ptr<tim::vx::Tensor> ProcessFusedActivation(
 
   delegate->GetOps().push_back(op);
   // delegate->GetTensors().push_back(processed_tensor);
+  // To prevent the id conflict between processed_tensor and model tensor,
+  // add an offset to the processed_tensor tensor id
   delegate->GetTensors().insert(
-      std::make_pair(delegate->GetTensors().size(),
-      processed_tensor)
-      );
+      std::make_pair(delegate->GetTensors().size() + 0x40000000, processed_tensor));
 
   return processed_tensor;
 }
@@ -125,10 +125,10 @@ std::shared_ptr<tim::vx::Tensor> ReverseInputTensor(
 
   delegate->GetOps().push_back(op);
   // delegate->GetTensors().push_back(reversed_tensor);
+  // To prevent the id conflict between processed_tensor and model tensor,
+  // add an offset to the processed_tensor tensor id
   delegate->GetTensors().insert(
-      std::make_pair(delegate->GetTensors().size(),
-      reversed_tensor)
-      );
+      std::make_pair(delegate->GetTensors().size() + 0x40000000, reversed_tensor));
 
   return reversed_tensor;
 }
