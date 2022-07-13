@@ -1844,6 +1844,12 @@ struct Batch2Space : public OpMapperBase<TfLiteBatchToSpaceNDParams> {
                       "spatial dimensions is 2");
       return false;
     }
+    int output_index = node->outputs->data[0];
+    if(context->tensors[output_index].dims->size == 0){
+      TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
+                      "dynamic shape in not support in batchtospace");
+      return false;
+    }
     if ((context->tensors[input_index].type == kTfLiteInt8 ||
          context->tensors[input_index].type == kTfLiteUInt8) &&
         context->tensors[input_index].quantization.type ==
