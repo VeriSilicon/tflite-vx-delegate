@@ -427,6 +427,92 @@ struct PowMapper : public SimpleOpMapper<T_OperationType> {
   }
 };
 
+template <typename T_OperationType>
+struct DequantizeMapper : public SimpleOpMapper<T_OperationType> {
+
+  DequantizeMapper(std::string name) : SimpleOpMapper<T_OperationType>(name) {}
+
+  bool IsOpSupported(TfLiteContext* context,
+                     TfLiteNode* node,
+                     const TfLiteRegistration* registration) const override {
+    auto input_tensor = context->tensors[node->inputs->data[0]];
+    auto output_tensor = context->tensors[node->outputs->data[0]];
+    const TfLiteAffineQuantization* params =
+        reinterpret_cast<const TfLiteAffineQuantization*>(
+            input_tensor.quantization.params);
+    if ((input_tensor.type == kTfLiteInt16 ||
+         input_tensor.type == kTfLiteFloat16) &&
+        output_tensor.type == kTfLiteFloat32 &&
+        input_tensor.quantization.type == kTfLiteAffineQuantization) {
+      TFLITE_LOG_PROD(
+          TFLITE_LOG_ERROR,
+          "ASYM I16/F16 input / F32 output is not supported");
+      return false;
+    }
+    if ((input_tensor.type == kTfLiteInt8 ||
+         input_tensor.type == kTfLiteUInt8) &&
+        output_tensor.type == kTfLiteFloat32 &&
+        input_tensor.quantization.type == kTfLiteAffineQuantization &&
+        params->scale->size>1) {
+      TFLITE_LOG_PROD(
+          TFLITE_LOG_ERROR,
+          "SYMM PerChannel I8/U8 input / F32 output is not supported");
+      return false;
+    }
+    return true;
+  }
+};
+
+template <typename T_OperationType>
+struct QuantizeMapper : public SimpleOpMapper<T_OperationType> {
+
+  QuantizeMapper(std::string name) : SimpleOpMapper<T_OperationType>(name) {}
+
+  bool IsOpSupported(TfLiteContext* context,
+                     TfLiteNode* node,
+                     const TfLiteRegistration* registration) const override {
+    auto input_tensor = context->tensors[node->inputs->data[0]];
+    auto output_tensor = context->tensors[node->outputs->data[0]];
+    const TfLiteAffineQuantization* params =
+        reinterpret_cast<const TfLiteAffineQuantization*>(
+            output_tensor.quantization.params);
+    if (input_tensor.type == kTfLiteInt32 &&
+        (output_tensor.type == kTfLiteUInt8||output_tensor.type == kTfLiteInt8) &&
+        input_tensor.quantization.type == kTfLiteAffineQuantization) {
+      TFLITE_LOG_PROD(
+          TFLITE_LOG_ERROR,
+          "ASYM I16 input / ASYM U8/ASYM I8 output is not supported");
+      return false;
+    }
+    if (input_tensor.type == kTfLiteInt16  &&
+        (output_tensor.type == kTfLiteUInt8||output_tensor.type == kTfLiteInt8) &&
+        input_tensor.quantization.type == kTfLiteAffineQuantization) {
+      TFLITE_LOG_PROD(
+          TFLITE_LOG_ERROR,
+          "ASYM I32 input / ASYM U8/ASYM I8 output is not supported");
+      return false;
+    }
+    if (input_tensor.type == kTfLiteInt16  &&
+        output_tensor.type == kTfLiteInt32 &&
+        input_tensor.quantization.type == kTfLiteAffineQuantization) {
+      TFLITE_LOG_PROD(
+          TFLITE_LOG_ERROR,
+          "ASYM I16 input / ASYM I32 output is not supported");
+      return false;
+    }
+    if (input_tensor.type == kTfLiteFloat32  &&
+        (output_tensor.type == kTfLiteUInt8||output_tensor.type == kTfLiteInt8) &&
+        output_tensor.quantization.type == kTfLiteAffineQuantization &&
+        params->scale->size>1) {
+      TFLITE_LOG_PROD(
+          TFLITE_LOG_ERROR,
+          "F32 input / SYMM PerChannel I8/U8 output is not supported");
+      return false;
+    }
+    return true;
+  }
+};
+
 template <typename T_OperationType, typename T_Param>
 struct SimpleOpWithFusedActiovationMapper
     : public OpMapperBase<T_Param, FusedActivationAction<0, T_Param>> {
@@ -2457,10 +2543,10 @@ static const std::map<int, createIOpMapItemFunc> reg = {
                        Pool2dMapper<tim::vx::PoolType::AVG_ANDROID>),
     REGISTER_OP_MAPPER(kTfLiteBuiltinDepthwiseConv2d, DepthwiseConv2dMapper),
     REGISTER_OP_MAPPER(kTfLiteBuiltinDequantize,
-                       SimpleOpMapper<tim::vx::ops::DataConvert>,
+                       DequantizeMapper<tim::vx::ops::DataConvert>,
                        "Dequantize"),
     REGISTER_OP_MAPPER(kTfLiteBuiltinQuantize,
-                       SimpleOpMapper<tim::vx::ops::DataConvert>,
+                       QuantizeMapper<tim::vx::ops::DataConvert>,
                        "Quantize"),
     REGISTER_OP_MAPPER(kTfLiteBuiltinConcatenation, ConcatenationMapper),
     REGISTER_OP_MAPPER(kTfLiteBuiltinLocalResponseNormalization,
