@@ -1737,9 +1737,13 @@ struct Gather : public OpMapperBase<TfLiteGatherParams> {
                    const void* params) override {
     TFLITE_LOG(TFLITE_LOG_INFO, "Create Gather op");
     const auto builtin = reinterpret_cast<const TfLiteGatherParams*>(params);
+    int batch_dims = builtin->batch_dims;
+    batch_dims < 0 ? batch_dims += inputs[1]->GetShape().size() : batch_dims;
+
     int axis = vx::delegate::utils::ConvertAxis(builtin->axis,
                                                 inputs[0]->GetShape().size());
-    auto op = delegate->GetGraph()->CreateOperation<tim::vx::ops::Gather>(axis);
+    auto op = delegate->GetGraph()->CreateOperation<tim::vx::ops::Gather>(
+        axis, batch_dims);
 
     (*op).BindInputs(inputs);
     (*op).BindOutputs(outputs);
