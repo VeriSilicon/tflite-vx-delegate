@@ -2304,6 +2304,12 @@ struct OneHotMapper : public OpMapperBase<TfLiteOneHotParams> {
   bool IsOpSupported(TfLiteContext* context,
                      TfLiteNode* node,
                      const TfLiteRegistration* registration) const override {
+    auto depth_tensor = context->tensors[node->inputs->data[1]];
+    if (depth_tensor.allocation_type != kTfLiteMmapRo) {
+      TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
+                      "delegate only support parameters tensor as const input");
+      return false;
+    }
     auto output_tensor = context->tensors[node->outputs->data[0]];
     if (output_tensor.type == kTfLiteBool) {
       TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "Bool type output is not supported");
