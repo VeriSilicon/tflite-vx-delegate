@@ -367,7 +367,7 @@ bool Delegate::SupportedOp(TfLiteContext* context,
     return it->second->IsSupported(context, node, registration);
   }
 
-  TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "Fallback unsupported op %d to TfLite", registration->builtin_code);
+  TFLITE_LOG_PROD(TFLITE_LOG_WARNING, "Fallback unsupported op %d to TfLite", registration->builtin_code);
 
   return false;
 }
@@ -689,7 +689,7 @@ TfLiteStatus Delegate::Invoke(const OpData& op_data,
     if (infered_input_tensor) {
       infered_input_tensor->CopyDataToTensor(const_cast<void*>(tensor_data));
     } else {
-      TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
+      TFLITE_LOG_PROD(TFLITE_LOG_WARNING,
                       "tensor in source graph removed before do layout "
                       "inference - if zero sized tensor involved");
     }

@@ -744,7 +744,7 @@ struct TransposeConvMapper : public OpMapperBase<TfLiteTransposeConvParams> {
     auto output_tensor = context->tensors[node->outputs->data[0]];
 
     if (0 == output_tensor.dims->size) {
-      TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "transpose conv cannot support dynamic shape");
+      TFLITE_LOG_PROD(TFLITE_LOG_WARNING, "transpose conv cannot support dynamic shape");
       return false;
     }
     return true;
@@ -970,6 +970,19 @@ struct L2NormalizationMapper
 };
 
 struct ReshapeMapper : public OpMapperBase<TfLiteReshapeParams> {
+  virtual bool IsOpSupported(TfLiteContext* context,
+                             TfLiteNode* node,
+                             const TfLiteRegistration* registration) const {
+    auto input_tensor = context->tensors[node->inputs->data[0]];
+    auto output_index = node->outputs->data[0];
+
+    if (context->tensors[output_index].dims->size == 0) {
+      TFLITE_LOG_PROD(TFLITE_LOG_WARNING,
+                      "dynamic shape in not support in reshape.");
+      return false;
+    }
+    return true;
+  }
   bool HandleMapOp(vx::delegate::Delegate* delegate,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
@@ -985,7 +998,8 @@ struct ReshapeMapper : public OpMapperBase<TfLiteReshapeParams> {
     // builtin prarameters or inputs[1], the two formats should be handled.
     if (inputs.size() == 2 &&
         inputs[1]->GetDataType() == tim::vx::DataType::INT32 &&
-        inputs[1]->GetShape().size() == 1) {
+        inputs[1]->GetShape().size() == 1 &&
+        inputs[1]->GetSpec().attr_ == tim::vx::TensorAttribute::CONSTANT) {
       std::vector<int32_t> shape_from_input1(inputs[1]->GetShape()[0]);
       inputs[1]->CopyDataFromTensor(shape_from_input1.data());
       new_shape.assign(shape_from_input1.rbegin(), shape_from_input1.rend());
@@ -1173,7 +1187,7 @@ struct PadMapper : public OpMapperBase<EmptyStructPlaceholder> {
                              const TfLiteRegistration* registration) const {
 
     if(0 == context->tensors[node->outputs->data[0]].dims->size){
-      TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "Pad cannot support dynamic shape");
+      TFLITE_LOG_PROD(TFLITE_LOG_WARNING, "Pad cannot support dynamic shape");
       return false;
     }
     return true;
@@ -1529,7 +1543,7 @@ struct Transpose : public OpMapperBase<TfLiteTransposeParams> {
                              const TfLiteRegistration* registration) const {
     int output_index = node->outputs->data[0];
     if (context->tensors[output_index].dims->size == 0){
-      TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
+      TFLITE_LOG_PROD(TFLITE_LOG_WARNING,
                         "Dynamic shape is not supported in transpose");
         return false;
     }
@@ -1936,7 +1950,7 @@ struct Batch2Space : public OpMapperBase<TfLiteBatchToSpaceNDParams> {
     }
     int output_index = node->outputs->data[0];
     if(context->tensors[output_index].dims->size == 0){
-      TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
+      TFLITE_LOG_PROD(TFLITE_LOG_WARNING,
                       "dynamic shape in not support in batchtospace");
       return false;
     }
@@ -1991,7 +2005,7 @@ struct Space2Batch : public OpMapperBase<TfLiteSpaceToBatchNDParams> {
     }
     int output_index = node->outputs->data[0];
     if(context->tensors[output_index].dims->size == 0){
-      TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
+      TFLITE_LOG_PROD(TFLITE_LOG_WARNING,
                       "dynamic shape in not support in space2batch");
       return false;
     }
@@ -2170,7 +2184,7 @@ struct Slice : public OpMapperBase<EmptyStructPlaceholder> {
 
 
     if( is_begin_dynamic || is_len_dynamic) {
-      TFLITE_LOG_PROD(TFLITE_LOG_INFO, "vx-delegate cannot support dynamic shaped operator(slice), fallback it to CPU");
+      TFLITE_LOG_PROD(TFLITE_LOG_WARNING, "vx-delegate cannot support dynamic shaped operator(slice), fallback it to CPU");
       return false;
     }
     if (input_dim_size > 3 && (batch_in != batch_out)) {
@@ -2462,7 +2476,7 @@ struct ArgOpMapper : public OpMapperBase<EmptyStructPlaceholder> {
     }
     if (0 == context->tensors[node->inputs->data[0]].dims->size ||
         0 == context->tensors[node->outputs->data[0]].dims->size) {
-      TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "Arg cannot support dynamic shape");
+      TFLITE_LOG_PROD(TFLITE_LOG_WARNING, "Arg cannot support dynamic shape");
       return false;
     }
     return true;
