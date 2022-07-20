@@ -970,6 +970,19 @@ struct L2NormalizationMapper
 };
 
 struct ReshapeMapper : public OpMapperBase<TfLiteReshapeParams> {
+  virtual bool IsOpSupported(TfLiteContext* context,
+                             TfLiteNode* node,
+                             const TfLiteRegistration* registration) const {
+    auto input_tensor = context->tensors[node->inputs->data[0]];
+    auto output_index = node->outputs->data[0];
+
+    if (context->tensors[output_index].dims->size == 0) {
+      TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
+                      "dynamic shape in not support in reshape.");
+      return false;
+    }
+    return true;
+  }
   bool HandleMapOp(vx::delegate::Delegate* delegate,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
