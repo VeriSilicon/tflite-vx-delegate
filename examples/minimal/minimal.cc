@@ -28,7 +28,7 @@ limitations under the License.
 
 #include "tensorflow/lite/delegates/external/external_delegate.h"
 #include "vsi_npu_custom_op.h"
-#include "utils.h"
+#include "util.h"
 
 // This is an example that is minimal to read a model
 // from disk and perform inference. There is no data being loaded
@@ -81,18 +81,18 @@ void setupInput(int argc,
     switch (in_tensor->type) {
       case kTfLiteFloat32:
       {
-        auto in = vx::delegate::utils::ReadData(argv[2], input_data, input_idx, in_tensor->bytes);
+        auto in = ReadData(argv[2], input_data, input_idx, in_tensor->bytes);
         memcpy(interpreter->typed_input_tensor<float>(input_idx), in.data(), in.size());
         break;
       }
       case kTfLiteUInt8:
       {
-        auto in = vx::delegate::utils::ReadData(argv[2], input_data, input_idx, in_tensor->bytes);
+        auto in = ReadData(argv[2], input_data, input_idx, in_tensor->bytes);
         memcpy(interpreter->typed_input_tensor<uint8_t>(input_idx), in.data(), in.size());
         break;
       }
       case kTfLiteInt8: {
-        auto in = vx::delegate::utils::ReadData(argv[2], input_data, input_idx, in_tensor->bytes);
+        auto in = ReadData(argv[2], input_data, input_idx, in_tensor->bytes);
         memcpy(interpreter->typed_input_tensor<int8_t>(input_idx), in.data(), in.size());
         break;
       }
@@ -218,8 +218,40 @@ int main(int argc, char* argv[]) {
   TFLITE_LOG(tflite::TFLITE_LOG_INFO, "=== Post-invoke CPU Interpreter State ===");
   tflite::PrintInterpreterState(cpu_interpreter.get());
 
-  vx::delegate::utils::CompareInterpreterResult(cpu_interpreter,npu_interpreter);
+  auto output_idx_list = npu_interpreter->outputs();
+  TFLITE_EXAMPLE_CHECK(npu_interpreter->outputs().size() ==
+                       cpu_interpreter->outputs().size());
+  for (size_t idx = 0; idx < output_idx_list.size(); idx++) {
+    TFLITE_EXAMPLE_CHECK(npu_interpreter->output_tensor(idx)->bytes ==
+                         cpu_interpreter->output_tensor(idx)->bytes);
+    auto bytes = npu_interpreter->output_tensor(idx)->bytes;
+    switch (npu_interpreter->output_tensor(idx)->type) {
+      case kTfLiteInt8: {
+        auto npu_out_buf = npu_interpreter->typed_output_tensor<int8_t>(idx);
+        auto cpu_out_buf = cpu_interpreter->typed_output_tensor<int8_t>(idx);
 
+        CompareTensorResult(idx, npu_out_buf, cpu_out_buf, bytes);
+        break;
+      }
+      case kTfLiteUInt8: {
+        auto npu_out_buf = npu_interpreter->typed_output_tensor<uint8_t>(idx);
+        auto cpu_out_buf = cpu_interpreter->typed_output_tensor<uint8_t>(idx);
+
+        CompareTensorResult(idx, npu_out_buf, cpu_out_buf, bytes);
+        break;
+      }
+      case kTfLiteFloat32: {
+        auto npu_out_buf = npu_interpreter->typed_output_tensor<float_t>(idx);
+        auto cpu_out_buf = cpu_interpreter->typed_output_tensor<float_t>(idx);
+
+        CompareTensorResult(idx, npu_out_buf, cpu_out_buf, bytes);
+        break;
+      }
+      default: {
+        TFLITE_EXAMPLE_CHECK(false);
+      }
+    }
+  }
   TfLiteExternalDelegateDelete(ext_delegate_ptr);
   return 0;
 }

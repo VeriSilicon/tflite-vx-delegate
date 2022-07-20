@@ -30,10 +30,12 @@ if(NOT TENSORFLOW_SOURCE_DIR)
 endif()
 
 include_directories(${TFLITE_SOURCE_DIR}/delegates/external)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../)
 
 set(CMAKE_CXX_STANDARD 11)
 add_executable(multi_device
   multi_device.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/../util.cc
 )
 target_link_libraries(multi_device
   tensorflow-lite

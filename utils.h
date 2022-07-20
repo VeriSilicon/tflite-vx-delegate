@@ -90,53 +90,6 @@ inline void Quantize(const std::vector<float>& data, float scale,
   }
 }
 
-#define TFLITE_EXAMPLE_CHECK(x)                              \
-  if (!(x)) {                                                \
-    fprintf(stderr, "Error at %s:%d\n", __FILE__, __LINE__); \
-    exit(1);                                                 \
-  }
-
-std::vector<uint8_t> ReadData(const char* model_location,
-                              const char* filename,
-                              size_t input_id,
-                              size_t required);
-
-std::vector<uint32_t> StringToInt(std::string string);
-
-void UnpackConfig(const char* filename,
-                   std::vector<std::string>& model_locations,
-                   std::vector<uint32_t>& model_num,
-                   std::vector<uint32_t>& devs_id,
-                   std::vector<std::vector<std::string>>& inputs_datas);
-
-template< typename T>
-float cosine(const std::vector<T>& lhs, const std::vector<T>& rhs) {
-  auto calc_m = [](const std::vector<T>& lhs) {
-    float lhs_m = 0.0f;
-
-    for(auto iter = lhs.begin(); iter != lhs.end(); ++iter) {
-      lhs_m += *iter * (*iter);
-    }
-    lhs_m = std::sqrt(lhs_m);
-
-    return lhs_m;
-  };
-
-  auto lhs_m = calc_m(lhs);
-  auto rhs_m = calc_m(rhs);
-
-  float element_sum = 0.f;
-  for(auto i = 0U; i < lhs.size(); ++i) {
-    element_sum += lhs[i]*rhs[i];
-  }
-
-  return element_sum/(lhs_m*rhs_m);
-}
-
-void CompareInterpreterResult(
-    std::unique_ptr<tflite::Interpreter> &cpu_interpreter,
-    std::unique_ptr<tflite::Interpreter> &npu_interpreter);
-
 }  // namespace utils
 }  // namespace delegate
 }  // namespace vx
