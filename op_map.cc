@@ -2030,6 +2030,17 @@ struct Space2Batch : public OpMapperBase<TfLiteSpaceToBatchNDParams> {
 };
 
 struct ReverseV2 : public OpMapperBase<TfLiteReverseSequenceParams> {
+  virtual bool IsOpSupported(TfLiteContext* context,
+                             TfLiteNode* node,
+                             const TfLiteRegistration* registration) const {
+    TfLiteTensor param_tensor = context->tensors[node->inputs->data[1]];
+    if (param_tensor.allocation_type != kTfLiteMmapRo) {
+      TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
+                      "const axis_tensor is only supported in reverse.");
+      return false;
+    }
+    return true;
+  }
   bool HandleMapOp(vx::delegate::Delegate* delegate,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
