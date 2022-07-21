@@ -550,9 +550,43 @@ struct SimpleOpWithFusedActiovationMapper
                    const void* params) override {
     TFLITE_LOG(TFLITE_LOG_INFO, "Creating %s op", name_.c_str());
 
-    auto op = delegate->GetGraph()->CreateOperation<T_OperationType>();
-    (*op).BindInputs(inputs).BindOutputs(outputs);
+    bool boradcast_required = (inputs[0]->GetShape() != inputs[1]->GetShape());
+    std::vector<std::shared_ptr<tim::vx::Tensor>> elementwise_inputs;
+    if (boradcast_required) {
+      tim::vx::TensorSpec spec = inputs[0]->GetSpec();
+      spec = spec.AsTransientSpec();
+      auto broadcast_out = delegate->GetGraph()->CreateTensor(spec);
+      if (inputs[0]->GetShape().size() > inputs[1]->GetShape().size()) {
+        std::vector<uint32_t> shape = inputs[0]->GetShape();
+        std::vector<int32> broadcast_param;
+        for (auto iter = shape.begin(); iter != shape.end(); iter++) {
+          broadcast_param.push_back(*iter);
+        }
+        auto op_broadcast =
+            delegate->GetGraph()->CreateOperation<tim::vx::ops::Broadcast>(
+                broadcast_param);
+        (*op_broadcast).BindInput(inputs[1]).BindOutput(broadcast_out);
+        elementwise_inputs.push_back(inputs[0]);
+        elementwise_inputs.push_back(broadcast_out);
+      } else {
+        std::vector<uint32_t> shape = inputs[1]->GetShape();
+        std::vector<int32> broadcast_param;
+        for (auto iter = shape.begin(); iter != shape.end(); iter++) {
+          broadcast_param.push_back(*iter);
+        }
+        auto op_broadcast =
+            delegate->GetGraph()->CreateOperation<tim::vx::ops::Broadcast>(
+                broadcast_param);
+        (*op_broadcast).BindInput(inputs[0]).BindOutput(broadcast_out);
+        elementwise_inputs.push_back(broadcast_out);
+        elementwise_inputs.push_back(inputs[1]);
+      }
+    }
 
+    auto op = delegate->GetGraph()->CreateOperation<T_OperationType>();
+    boradcast_required ? (*op).BindInputs(elementwise_inputs)
+                   : (*op).BindInputs(inputs);
+    (*op).BindOutputs(outputs);
     delegate->GetOps().push_back(std::move(op));
 
     return true;
@@ -1613,21 +1647,21 @@ struct BatchMatmul : public OpMapperBase<TfLiteBatchMatMulParams> {
 
     std::vector<std::vector<uint32_t>> in_shape = {inputs[0]->GetShape(),
                                                    inputs[1]->GetShape()};
-    bool broadcase_flag = false;
+    bool boradcast_required = false;
 
     // Need broadcast or not
     if (in_shape[0].size() != in_shape[1].size()) {
-      broadcase_flag = true;
+      boradcast_required = true;
     } else {
       for (int i = 2; i < in_shape[0].size(); ++i) {
         if (in_shape[0][i] != in_shape[1][i]) {
-          broadcase_flag = true;
+          boradcast_required = true;
         }
       }
     }
 
     std::vector<std::shared_ptr<tim::vx::Tensor>> broadcast_out;
-    if (broadcase_flag) {
+    if (boradcast_required) {
       int out_cnt;
       auto dim_iter0 = in_shape[0].begin();
       auto dim_iter1 = in_shape[1].begin();
@@ -1679,7 +1713,7 @@ struct BatchMatmul : public OpMapperBase<TfLiteBatchMatMulParams> {
     // adj_x & adj_y both true are not supported
     auto op = delegate->GetGraph()->CreateOperation<tim::vx::ops::Matmul>(
         adj_x, adj_y);
-    broadcase_flag
+    boradcast_required
         ? (*op).BindInput(broadcast_out[0]).BindInput(broadcast_out[1])
         : (*op).BindInputs(inputs);
     (*op).BindOutputs(outputs);
