@@ -6,6 +6,7 @@ This example shows how you can build and run  TensorFlow Lite models on multi de
 
 1. Trun option TFLITE_ENABLE_MULTI_DEVICE to On in ./CMakeLists.txt
 2. Only 40 bit driver support this feature, EXTERNAL_VIV_SDK should be setted to point to 40 bit driver location when build cmake
+3. If using TIM_VX_INSTALL，TIM_VX should open TIM_VX_ENABLE_PLATFORM
 
 #### Step 2. Run
 

@@ -416,7 +416,10 @@ void Delegate::CreateCacheOp(const OpData& op_data) {
 std::unique_ptr<vx::delegate::OpData> Delegate::Init(
     TfLiteContext* context, const TfLiteDelegateParams* params) {
   TFLITE_LOG(TFLITE_LOG_INFO, "vx_delegate Delegate::Init");
-  devices_ = tim::vx::platform::NativeDevice::Enumerate();
+  if(is_multi_device_){
+    devices_ = tim::vx::platform::NativeDevice::Enumerate();
+  }
+  
   nbg_size_ = 0;
   auto derivedDelegate = reinterpret_cast<DerivedDelegateData*>(params->delegate);
   if (derivedDelegate->allow_cache_mode){
