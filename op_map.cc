@@ -1339,6 +1339,12 @@ struct SplitMapper : public OpMapperBase<TfLiteSplitParams> {
   virtual bool IsOpSupported(TfLiteContext* context,
                              TfLiteNode* node,
                              const TfLiteRegistration* registration) const {
+    TfLiteTensor output_tensor = context->tensors[node->outputs->data[0]];
+    if (output_tensor.allocation_type == kTfLiteDynamic) {
+      TFLITE_LOG_PROD(TFLITE_LOG_WARNING,
+                      "dynamic shpae is not supported in split.");
+      return false;
+    }
     for (int i = 0; i < node->inputs->size; i++) {
       int input_index = node->inputs->data[i];
       if ((context->tensors[input_index].type == kTfLiteInt8 ||
@@ -2238,6 +2244,12 @@ struct SplitVMapper : public OpMapperBase<TfLiteSplitVParams> {
   bool IsOpSupported(TfLiteContext* context,
                      TfLiteNode* node,
                      const TfLiteRegistration* registration) const override {
+    TfLiteTensor output_tensor = context->tensors[node->outputs->data[0]];
+    if (output_tensor.allocation_type == kTfLiteDynamic) {
+      TFLITE_LOG_PROD(TFLITE_LOG_WARNING,
+                      "dynamic shpae is not supported in split.");
+      return false;
+    }
     for (int i = 0; i < node->inputs->size; i++) {
       int input_index = node->inputs->data[i];
       if ((context->tensors[input_index].type == kTfLiteInt8 ||
@@ -2271,11 +2283,17 @@ struct SplitVMapper : public OpMapperBase<TfLiteSplitVParams> {
     axis =
         vx::delegate::utils::ConvertAxis(axis, input_tensor->GetShape().size());
 
+    uint32_t total_slices_dim = inputs[0]->GetShape()[axis];
     std::vector<int32_t> slices_i32(builtin->num_splits);
     std::vector<uint32_t> slices;
     slices_tensor->CopyDataFromTensor(slices_i32.data());
     for (auto s : slices_i32) {
-      slices.push_back(s);
+      if (s > 0) {
+        total_slices_dim -= s;
+        slices.push_back(s);
+      } else {
+        slices.push_back(total_slices_dim);
+      }
     }
 
     auto op = delegate->GetGraph()->CreateOperation<tim::vx::ops::Split>(
