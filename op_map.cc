@@ -2174,6 +2174,18 @@ struct ReduceOpMapper : public OpMapperBase<TfLiteReducerParams> {
 };
 
 struct ExpandDimsMapper : public OpMapperBase<EmptyStructPlaceholder> {
+  bool IsOpSupported(TfLiteContext* context,
+                     TfLiteNode* node,
+                     const TfLiteRegistration* registration) const override {
+    TfLiteTensor axis_tensor = context->tensors[node->inputs->data[1]];
+
+    if (axis_tensor.allocation_type != kTfLiteMmapRo) {
+      TFLITE_LOG_PROD(TFLITE_LOG_WARNING,
+                      "const axis_tensor is only supported in expand_dims.");
+      return false;
+    }
+    return true;
+  }
   bool HandleMapOp(vx::delegate::Delegate* delegate,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
