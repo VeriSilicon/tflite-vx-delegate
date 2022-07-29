@@ -295,6 +295,10 @@ struct OpMapperBase : public vx::op_map::IOpMapper {
         TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "Int64 input is not supported");
         return false;
       }
+      if (context->tensors[input_index].type == kTfLiteString) {
+        TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "String input is not supported");
+        return false;
+      }
       if (context->tensors[input_index].dims->size > 6) {
         TFLITE_LOG_PROD(
             TFLITE_LOG_ERROR,
