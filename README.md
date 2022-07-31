@@ -69,7 +69,7 @@ export LD_LIBRARY_PATH=${VIVANTE_SDK_DIR}/drivers:$LD_LIBRARY_PATH # the "driver
 ./benchmark_model --external_delegate_path=<patch_to_libvx_delegate.so> --graph=<tflite_model.tflite>
 # If you would like to use cache mode which save and load binary graph in local disk
 ./benchmark_model --external_delegate_path=<patch_to_libvx_delegate.so> \
-                  --external_delegate_path='allowed_cache_mode:true;cache_file_path:<cache_file>' \
+                  --external_delegate_options='allowed_cache_mode:true;cache_file_path:<cache_file>' \
                   --graph=<tflite_model.tflite>
 ```
 
