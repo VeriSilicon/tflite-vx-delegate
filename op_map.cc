@@ -411,6 +411,102 @@ struct SimpleOpMapper : public OpMapperBase<EmptyStructPlaceholder> {
   }
 };
 
+struct MinimumMapper : public OpMapperBase<EmptyStructPlaceholder> {
+  bool HandleMapOp(vx::delegate::Delegate* delegate,
+                   std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
+                   std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
+                   const void* params) override {
+    TFLITE_LOG(TFLITE_LOG_INFO, "Creating Minimum op");
+
+    bool boradcast_required = (inputs[0]->GetShape() != inputs[1]->GetShape());
+    std::vector<std::shared_ptr<tim::vx::Tensor>> elementwise_inputs;
+    if (boradcast_required) {
+      tim::vx::TensorSpec spec = inputs[0]->GetSpec();
+      spec = spec.AsTransientSpec();
+      auto broadcast_out = delegate->GetGraph()->CreateTensor(spec);
+      if (inputs[0]->GetShape().size() > inputs[1]->GetShape().size()) {
+        std::vector<uint32_t> shape = inputs[0]->GetShape();
+        std::vector<int32> broadcast_param;
+        for (auto iter = shape.begin(); iter != shape.end(); iter++) {
+          broadcast_param.push_back(*iter);
+        }
+        auto op_broadcast =
+            delegate->GetGraph()->CreateOperation<tim::vx::ops::Broadcast>(
+                broadcast_param);
+        (*op_broadcast).BindInput(inputs[1]).BindOutput(broadcast_out);
+        elementwise_inputs.push_back(inputs[0]);
+        elementwise_inputs.push_back(broadcast_out);
+      } else {
+        std::vector<uint32_t> shape = inputs[1]->GetShape();
+        std::vector<int32> broadcast_param;
+        for (auto iter = shape.begin(); iter != shape.end(); iter++) {
+          broadcast_param.push_back(*iter);
+        }
+        auto op_broadcast =
+            delegate->GetGraph()->CreateOperation<tim::vx::ops::Broadcast>(
+                broadcast_param);
+        (*op_broadcast).BindInput(inputs[0]).BindOutput(broadcast_out);
+        elementwise_inputs.push_back(broadcast_out);
+        elementwise_inputs.push_back(inputs[1]);
+      }
+    }
+    auto op = delegate->GetGraph()->CreateOperation<tim::vx::ops::Minimum>();
+    boradcast_required ? (*op).BindInputs(elementwise_inputs)
+                       : (*op).BindInputs(inputs);
+    (*op).BindOutputs(outputs);
+    delegate->GetOps().push_back(std::move(op));
+    return true;
+  }
+};
+
+struct MaximumMapper : public OpMapperBase<EmptyStructPlaceholder> {
+  bool HandleMapOp(vx::delegate::Delegate* delegate,
+                   std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
+                   std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
+                   const void* params) override {
+    TFLITE_LOG(TFLITE_LOG_INFO, "Creating Maximum op");
+
+    bool boradcast_required = (inputs[0]->GetShape() != inputs[1]->GetShape());
+    std::vector<std::shared_ptr<tim::vx::Tensor>> elementwise_inputs;
+    if (boradcast_required) {
+      tim::vx::TensorSpec spec = inputs[0]->GetSpec();
+      spec = spec.AsTransientSpec();
+      auto broadcast_out = delegate->GetGraph()->CreateTensor(spec);
+      if (inputs[0]->GetShape().size() > inputs[1]->GetShape().size()) {
+        std::vector<uint32_t> shape = inputs[0]->GetShape();
+        std::vector<int32> broadcast_param;
+        for (auto iter = shape.begin(); iter != shape.end(); iter++) {
+          broadcast_param.push_back(*iter);
+        }
+        auto op_broadcast =
+            delegate->GetGraph()->CreateOperation<tim::vx::ops::Broadcast>(
+                broadcast_param);
+        (*op_broadcast).BindInput(inputs[1]).BindOutput(broadcast_out);
+        elementwise_inputs.push_back(inputs[0]);
+        elementwise_inputs.push_back(broadcast_out);
+      } else {
+        std::vector<uint32_t> shape = inputs[1]->GetShape();
+        std::vector<int32> broadcast_param;
+        for (auto iter = shape.begin(); iter != shape.end(); iter++) {
+          broadcast_param.push_back(*iter);
+        }
+        auto op_broadcast =
+            delegate->GetGraph()->CreateOperation<tim::vx::ops::Broadcast>(
+                broadcast_param);
+        (*op_broadcast).BindInput(inputs[0]).BindOutput(broadcast_out);
+        elementwise_inputs.push_back(broadcast_out);
+        elementwise_inputs.push_back(inputs[1]);
+      }
+    }
+    auto op = delegate->GetGraph()->CreateOperation<tim::vx::ops::Maximum>();
+    boradcast_required ? (*op).BindInputs(elementwise_inputs)
+                       : (*op).BindInputs(inputs);
+    (*op).BindOutputs(outputs);
+    delegate->GetOps().push_back(std::move(op));
+    return true;
+  }
+};
+
 template <typename T_OperationType>
 struct PowMapper : public SimpleOpMapper<T_OperationType> {
 
@@ -2726,18 +2822,13 @@ static const std::map<int, createIOpMapItemFunc> reg = {
     REGISTER_OP_MAPPER(kTfLiteBuiltinHardSwish,
                        SimpleOpMapper<tim::vx::ops::HardSwish>,
                        "HardSwish"),
-    REGISTER_OP_MAPPER(kTfLiteBuiltinMinimum,
-                       SimpleOpMapper<tim::vx::ops::Minimum>,
-                       "Minimum"),
-    REGISTER_OP_MAPPER(kTfLiteBuiltinMaximum,
-                       SimpleOpMapper<tim::vx::ops::Maximum>,
-                       "Maximum"),
+    REGISTER_OP_MAPPER(kTfLiteBuiltinMinimum, MinimumMapper),
+    REGISTER_OP_MAPPER(kTfLiteBuiltinMaximum, MaximumMapper),
     REGISTER_OP_MAPPER(kTfLiteBuiltinAdd, AddMapper, "Add"),
     REGISTER_OP_MAPPER(kTfLiteBuiltinSub, SubMapper, "Sub"),
     REGISTER_OP_MAPPER(kTfLiteBuiltinDiv, DivMapper, "Div"),
     REGISTER_OP_MAPPER(kTfLiteBuiltinMul, MulMapper, "Multiply"),
-    REGISTER_OP_MAPPER(
-        kTfLiteBuiltinPow, PowMapper<tim::vx::ops::Pow>, "Pow"),
+    REGISTER_OP_MAPPER(kTfLiteBuiltinPow, PowMapper<tim::vx::ops::Pow>, "Pow"),
     REGISTER_OP_MAPPER(kTfLiteBuiltinResizeNearestNeighbor,
                        ResizeMapper<tim::vx::ResizeType::NEAREST_NEIGHBOR>),
     REGISTER_OP_MAPPER(kTfLiteBuiltinResizeBilinear,
@@ -2768,7 +2859,8 @@ static const std::map<int, createIOpMapItemFunc> reg = {
         kTfLiteBuiltinTanh, SimpleOpMapper<tim::vx::ops::Tanh>, "tanh"),
     REGISTER_OP_MAPPER(kTfLiteBuiltinGather, Gather),
     REGISTER_OP_MAPPER(kTfLiteBuiltinGatherNd, GatherNd),
-    REGISTER_OP_MAPPER(kTfLiteBuiltinUnidirectionalSequenceLstm, UnidirectionalSequenceLstm),
+    REGISTER_OP_MAPPER(kTfLiteBuiltinUnidirectionalSequenceLstm,
+                       UnidirectionalSequenceLstm),
     REGISTER_OP_MAPPER(kTfLiteBuiltinBatchToSpaceNd, Batch2Space),
     REGISTER_OP_MAPPER(kTfLiteBuiltinSpaceToBatchNd, Space2Batch),
     REGISTER_OP_MAPPER(kTfLiteBuiltinReverseV2, ReverseV2),
