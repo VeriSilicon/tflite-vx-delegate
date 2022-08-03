@@ -20,7 +20,7 @@
 #
 cmake_minimum_required(VERSION 3.16)
 
-# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-c++11-narrowing -Wno-error -fsanitize=address -ggdb")
+option(TFLITE_ENABLE_MULTI_DEVICE       "Enable multi devices support"          OFF)
 
 if(NOT CMAKE_BUILD_TYPE)
   message(STATUS "Setting build type to Release, for debug builds use"
@@ -62,8 +62,7 @@ if(ANDROID_TOOLCHAIN)
   list(APPEND VX_DELEGATE_DEPENDENCIES log)
 endif()
 
-target_link_libraries(vx_delegate -Wl,--whole-archive ${VX_DELEGATE_DEPENDENCIES})
-# target_link_libraries(vx_delegate ${VX_DELEGATE_DEPENDENCIES})
+target_link_libraries(vx_delegate ${VX_DELEGATE_DEPENDENCIES})
 add_library(vx_custom_op STATIC ${VX_CUSTOM_OP_SRCS})
 target_include_directories(vx_custom_op PUBLIC ${PROJECT_SOURCE_DIR})
 target_link_libraries(vx_custom_op TensorFlow::tensorflow-lite)
@@ -73,3 +72,6 @@ set_target_properties(benchmark_model PROPERTIES INTERFACE_LINK_LIBRARIES vx_cus
 set_target_properties(label_image PROPERTIES INTERFACE_LINK_LIBRARIES vx_custom_op)
 
 add_subdirectory(examples/minimal)
+if(TFLITE_ENABLE_MULTI_DEVICE)
+  add_subdirectory(examples/multi_device)
+endif()
