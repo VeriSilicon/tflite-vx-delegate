@@ -973,13 +973,10 @@ struct LocalResponseNormalizationMapper
     TFLITE_LOG(TFLITE_LOG_INFO, "Creating LRN op");
     const auto builtin =
         reinterpret_cast<const TfLiteLocalResponseNormParams*>(params);
+    int size = builtin->radius * 2 + 1; // radius is the half of normalization window
     auto op = delegate->GetGraph()
                   ->CreateOperation<tim::vx::ops::LocalResponseNormalization>(
-                      builtin->radius,
-                      builtin->alpha,
-                      builtin->beta,
-                      builtin->bias,
-                      0);
+                      size, builtin->alpha, builtin->beta, builtin->bias, 0);
     (*op).BindInputs(inputs).BindOutputs(outputs);
 
     delegate->GetOps().push_back(std::move(op));
