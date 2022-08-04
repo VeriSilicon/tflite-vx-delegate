@@ -1083,10 +1083,21 @@ struct StridedSliceMapper : public OpMapperBase<TfLiteStridedSliceParams> {
     TFLITE_LOG(TFLITE_LOG_INFO, "Check  StridedSlice");
     const auto builtin =
         reinterpret_cast<const TfLiteStridedSliceParams*>(node->builtin_data);
-    if (builtin->new_axis_mask) {
-      TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "new_axis_mask > 0 is not supported");
+    auto begin_tensor = context->tensors[node->inputs->data[1]];
+    auto end_tensor = context->tensors[node->inputs->data[2]];
+    auto strides_tensor = context->tensors[node->inputs->data[3]];
+    if (begin_tensor.allocation_type != kTfLiteMmapRo ||
+        end_tensor.allocation_type != kTfLiteMmapRo ||
+        strides_tensor.allocation_type != kTfLiteMmapRo){
+      TFLITE_LOG_PROD(
+          TFLITE_LOG_ERROR,
+          "begin_tensor, end_tensor and strides_tensor must be constant.");
       return false;
     }
+      if (builtin->new_axis_mask) {
+        TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "new_axis_mask > 0 is not supported");
+        return false;
+      }
     if (builtin->ellipsis_mask) {
       TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "ellipsis_mask > 0 is not supported");
       return false;
