@@ -1284,6 +1284,11 @@ struct ResizeMapper : public OpMapperBase<TfLiteResizeNearestNeighborParams> {
         TFLITE_LOG_INFO, "Check Resize(%d)", static_cast<int>(resizeType));
 
     int input_index = node->inputs->data[0];
+    int shape_index = node->inputs->data[1];
+    if (context->tensors[shape_index].allocation_type != kTfLiteMmapRo) {
+      TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "shape tensor must be constant.");
+      return false;
+    }
     if ((context->tensors[input_index].type == kTfLiteInt8 ||
          context->tensors[input_index].type == kTfLiteUInt8) &&
         context->tensors[input_index].quantization.type ==
