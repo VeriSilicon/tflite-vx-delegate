@@ -23,13 +23,13 @@ set(TIM_VX_ENABLE_PLATFORM "ON")
 
 if(TFLITE_ENABLE_MULTI_DEVICE)
   set(TIM_VX_ENABLE_40BIT "ON")
-  if((NOT EXTERNAL_VIV_SDK))
-    message(FATAL_ERROR "FATAL: multi device only suppot 40 bit driver,
-                                please assign driver location with EXTERNAL_VIV_SDK")
-  endif()
 endif()
 
 if((NOT DEFINED TIM_VX_INSTALL))
+  if(TFLITE_ENABLE_MULTI_DEVICE AND (NOT EXTERNAL_VIV_SDK))
+    message(FATAL_ERROR "FATAL: multi device only suppot 40 bit driver,
+                                please assign driver location with EXTERNAL_VIV_SDK")
+  endif()
   include(FetchContent)
   FetchContent_Declare(
     tim-vx

@@ -56,9 +56,7 @@ TfLiteDelegate* CreateVxDelegateFromOptions(char** options_keys,
   }
 
   constexpr char kAllowedSaveLoadNBG[] = "allowed_cache_mode";
-  constexpr char kAllowedMultiDevice[] = "allowed_multi_device_mode";
   constexpr char kDeviceId[] = "device_id";
-  constexpr char kModelLocation[] = "model_location";
   constexpr char kAllowedBuiltinOp[] = "allowed_builtin_code";
   constexpr char kReportErrorDuingInit[] = "error_during_init";
   constexpr char kReportErrorDuingPrepare[] = "error_during_prepare";
@@ -67,12 +65,8 @@ TfLiteDelegate* CreateVxDelegateFromOptions(char** options_keys,
   std::vector<tflite::Flag> flag_list = {
       tflite::Flag::CreateFlag(kAllowedSaveLoadNBG, &options.allowed_cache_mode,
                                "Allowed save load nbg."),
-      tflite::Flag::CreateFlag(kAllowedMultiDevice, &options.allowed_multi_device_mode,
-                               "Allowed run multi device"),
       tflite::Flag::CreateFlag(kDeviceId, &options.device_id,
                                "device id"),
-      tflite::Flag::CreateFlag(kModelLocation, &options.model_location,
-                               "model locatin"),
       tflite::Flag::CreateFlag(kAllowedBuiltinOp, &options.allowed_builtin_code,
                                "Allowed builtin code."),
       tflite::Flag::CreateFlag(kReportErrorDuingInit,
@@ -93,8 +87,6 @@ TfLiteDelegate* CreateVxDelegateFromOptions(char** options_keys,
 
   TFLITE_LOG(INFO) << "Vx delegate: allowed_cache_mode set to "
                    << options.allowed_cache_mode << ".";
-  TFLITE_LOG(INFO) << "Vx delegate: allowed_multi_device_mode set to "
-                   << options.allowed_multi_device_mode << ".";
   TFLITE_LOG(INFO) << "Vx delegate: device num set to "
                    << options.device_id << ".";
   TFLITE_LOG(INFO) << "Vx delegate: allowed_builtin_code set to "
