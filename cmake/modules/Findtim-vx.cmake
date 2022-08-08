@@ -43,7 +43,7 @@ if((NOT DEFINED TIM_VX_INSTALL))
   include_directories(${tim-vx_SOURCE_DIR}/include)
   add_subdirectory("${tim-vx_SOURCE_DIR}"
                    "${tim-vx_BINARY_DIR}")
-  list(APPEND VX_DELEGATE_DEPENDENCIES tim-vx)
+  # list(APPEND VX_DELEGATE_DEPENDENCIES tim-vx)
 else()
   message("=== Building with TIM_VX_LIBRIRIES from ${TIM_VX_INSTALL} ===")
   include_directories(${TIM_VX_INSTALL}/include)

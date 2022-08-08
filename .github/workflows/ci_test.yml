@@ -1,0 +1,56 @@
+name: CI test for vx-delegate
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    - cron:  '0 16 * * 4' 
+
+env:
+  # CodeQl and AddressSanitizer needs more memory
+  BUILD_TYPE: Release
+  LD_LIBRARY_PATH: ${{github.workspace}}/build/_deps/tim-vx-src/prebuilt-sdk/x86_64_linux/lib:${{github.workspace}}/build/_deps/tim-vx-install/build/lib
+  VIVANTE_SDK_DIR: ${{github.workspace}}/build/_deps/tim-vx-src/prebuilt-sdk/x86_64_linux/
+  CODEQL_CHECK: Off
+
+
+jobs:
+
+  vx-delegate-build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Initialize CodeQL
+      if: ${{ env.CODEQL_CHECK != 'Off' }}
+      uses: github/codeql-action/init@v2
+      with:
+        languages: cpp, python
+    - name: Configure CMake
+      # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
+      # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
+      run: |
+        cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DTFLITE_KERNEL_TEST=ON
+        cd ${{github.workspace}}/build/_deps/tensorflow-src
+        git checkout v2.9.0 
+        patch -p1 < ${{github.workspace}}/patches/kernel_test.patch
+        patch -p1 < ${{github.workspace}}/patches/acc_correction.patch
+        cd ${{github.workspace}}/build/nsync && git checkout v1.24.0
+        cd ${{github.workspace}}/build/re2 && git checkout 2022-02-01
+        
+    - name: Perform CodeQL Analysis
+      if: ${{ env.CODEQL_CHECK != 'Off' }}
+      uses: github/codeql-action/analyze@v2
+    
+    - name: build
+      # Build your program with the given configuration
+      run: |
+        cd ${{github.workspace}}/build && make all -j12
+        
+    - name: do kernel test
+      id: kernel_test
+      run: |   
+        cd ${{github.workspace}}/script
+        chmod u+x ${{github.workspace}}/script/KernelTest.sh
+        ./KernelTest.sh
