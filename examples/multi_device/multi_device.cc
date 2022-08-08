@@ -210,18 +210,10 @@ int main(int argc, char* argv[]) {
     for (size_t j = 0; j < repeat_num[i]; j++) {
       TfLiteExternalDelegateOptions options =
           TfLiteExternalDelegateOptionsDefault(delegate_so);
-      const char* allow_multi_device_key = "allowed_multi_device_mode";
-      const char* allow_multi_device_value = "true";
       const char* device_id_key = "device_id";
       const char* device_id_value = std::to_string(devs_id[i]).c_str();
-      const char* model_localtion_key = "model_location";
-      const char* model_location_value = model_locations[i].c_str();
 
-      options.insert(
-          &options, allow_multi_device_key, allow_multi_device_value);
       options.insert(&options, device_id_key, device_id_value);
-      options.insert(&options, model_localtion_key, model_location_value);
-
       runSingleWork(model_locations[i].c_str(), inputs_data_files[i], options);
     }
   }
