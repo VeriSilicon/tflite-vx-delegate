@@ -416,9 +416,6 @@ void Delegate::CreateCacheOp(const OpData& op_data) {
 std::unique_ptr<vx::delegate::OpData> Delegate::Init(
     TfLiteContext* context, const TfLiteDelegateParams* params) {
   TFLITE_LOG(TFLITE_LOG_INFO, "vx_delegate Delegate::Init");
-  if(is_multi_device_){
-    devices_ = tim::vx::platform::NativeDevice::Enumerate();
-  }
   
   nbg_size_ = 0;
   auto derivedDelegate = reinterpret_cast<DerivedDelegateData*>(params->delegate);
@@ -432,6 +429,7 @@ std::unique_ptr<vx::delegate::OpData> Delegate::Init(
   if(derivedDelegate->allow_multi_device_mode){
     is_multi_device_ = true;
     device_id_ = derivedDelegate->device_id;
+    devices_ = tim::vx::platform::NativeDevice::Enumerate();
   }
 
   compiled_ = false;
@@ -657,7 +655,7 @@ TfLiteStatus Delegate::Invoke(const OpData& op_data,
         }
         fs_.write(nbg_buf.get(),nbg_size_);
         fs_.close();
-    } else if(is_multi_device_){
+    } else if(is_multi_device_ && is_multi_device_.value()){
       executor_ =
            std::make_shared<tim::vx::platform::NativeExecutor>(devices_[device_id_]);
       executable_ = tim::vx::platform::Compile(layout_infered_.first, executor_);
@@ -693,7 +691,7 @@ TfLiteStatus Delegate::Invoke(const OpData& op_data,
                       "tensor in source graph removed before do layout "
                       "inference - if zero sized tensor involved");
     }
-    if (is_multi_device_) {
+    if (is_multi_device_ && is_multi_device_.value()) {
       auto input_spec = infered_input_tensor->GetSpec();
       inputs_.push_back(executable_->AllocateTensor(input_spec));
       executable_->SetInput(inputs_[tensor_index]);
@@ -703,7 +701,7 @@ TfLiteStatus Delegate::Invoke(const OpData& op_data,
   }
 
   tensor_index = 0;
-  if(is_multi_device_){
+  if(is_multi_device_ && is_multi_device_.value()){
     for (int tensor_idx : op_data.subgraph_outputs) {
       TfLiteTensor& tf_tensor = context->tensors[tensor_idx];
       auto src_output_tensor = tensors_[tensor_idx];
@@ -714,7 +712,7 @@ TfLiteStatus Delegate::Invoke(const OpData& op_data,
   }
 
   TFLITE_LOG(TFLITE_LOG_INFO, "Invoking graph");
-  if (is_multi_device_) {
+  if (is_multi_device_ && is_multi_device_.value()) {
     auto executable_set = tim::vx::platform::CreateExecutableSet({executable_, executable_});
     executor_->Submit(executable_set,executable_set);
     executor_->Trigger();
@@ -730,7 +728,7 @@ TfLiteStatus Delegate::Invoke(const OpData& op_data,
     TfLiteTensor& tf_tensor = context->tensors[tensor_idx];
     TFLITE_LOG(
         TFLITE_LOG_INFO, "Copying output %d, %s", tensor_idx, tf_tensor.name);
-    if (is_multi_device_) {
+    if (is_multi_device_ && is_multi_device_.value()) {
       void* tensor_data = reinterpret_cast<void*>(tf_tensor.data.raw);
       outputs_[tensor_index]->CopyDataFromTensor(tensor_data);
     } else {
