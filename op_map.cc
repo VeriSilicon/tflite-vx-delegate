@@ -2099,16 +2099,6 @@ struct Batch2Space : public OpMapperBase<TfLiteBatchToSpaceNDParams> {
                       "dynamic shape in not support in batchtospace");
       return false;
     }
-    if ((context->tensors[input_index].type == kTfLiteInt8 ||
-         context->tensors[input_index].type == kTfLiteUInt8) &&
-        context->tensors[input_index].quantization.type ==
-            kTfLiteNoQuantization) {
-      TFLITE_LOG_PROD(
-          TFLITE_LOG_ERROR,
-          "Int8 or uint8 input without quantization is not supported in "
-          "Batch2Space");
-      return false;
-    }
     return true;
   }
 
@@ -2695,12 +2685,26 @@ struct Conv3dMapper : public Conv3dKind<TfLiteConv3DParams> {
   virtual bool IsOpSupported(TfLiteContext* context,
                              TfLiteNode* node,
                              const TfLiteRegistration* registration) const {
+    const auto builtin =
+        reinterpret_cast<const TfLiteConv3DParams*>(node->builtin_data);
+    if (builtin->dilation_width_factor > 1 ||
+        builtin->dilation_height_factor > 1 ||
+        builtin->dilation_depth_factor > 1) {
+      TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
+                      "conv3d could not support dilation > 1.");
+      return false;
+    }
     auto input_tensor = context->tensors[node->inputs->data[0]];
     auto weight_tensor = context->tensors[node->inputs->data[1]];
 
     if (input_tensor.type != weight_tensor.type) {
       TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
                       "hybrid data type is not supported in conv3d.");
+      return false;
+    }
+    if (weight_tensor.allocation_type != kTfLiteMmapRo) {
+      TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
+                      "weight tensor must be const in conv3d.");
       return false;
     }
     return true;
