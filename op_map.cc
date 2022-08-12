@@ -313,6 +313,12 @@ struct OpMapperBase : public vx::op_map::IOpMapper {
                           "of dims is 0");
           return false;
         }
+        if ((context->tensors[input_index].dims->data[j] > 65535) && (j > 0)) {
+          TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
+                          "vx-delegate doesn't support tensor height/width > "
+                          "65535");
+          return false;
+        }
       }
     }
     for (int i = 0; i < node->outputs->size; i++) {
@@ -775,20 +781,6 @@ struct FullyConnectedMapper
 };
 
 struct SoftmaxMapper : public OpMapperBase<TfLiteSoftmaxParams> {
-  bool IsOpSupported(TfLiteContext* context,
-                     TfLiteNode* node,
-                     const TfLiteRegistration* registration) const override {
-    int input_index = node->inputs->data[0];
-    auto input_dims = context->tensors[input_index].dims;
-    if (input_dims->data[1] > 65535 || input_dims->data[2] > 65535) {
-      TFLITE_LOG_PROD(
-          TFLITE_LOG_ERROR,
-          "vx-delegate doesn't support tensor height/width > 65535");
-      return false;
-    }
-    return true;
-  }
-
   bool HandleMapOp(vx::delegate::Delegate* delegate,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
