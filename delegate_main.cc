@@ -382,6 +382,7 @@ TfLiteDelegate* Delegate::Create(const VxDelegateOptions* options) {
   delegate->parent.FreeBufferHandle = &FreeBufferHandle;
 
   delegate->device_id = options->device_id;
+  delegate->allow_cache_mode = options->allowed_cache_mode;
   if(delegate->allow_cache_mode){
     delegate->cache_path = options->cache_file_path;
   }
