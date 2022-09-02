@@ -648,13 +648,13 @@ TfLiteStatus Delegate::Invoke(const OpData& op_data,
         TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "compile to binary failed");
         return kTfLiteDelegateError;
         }
-        std::shared_ptr<char> nbg_buf(new char[nbg_size_]);
-        compiled_ = layout_infered_.first->CompileToBinary(nbg_buf.get(), &nbg_size_);
+        std::vector<uint8_t> nbg_buf(nbg_size_);
+        compiled_ = layout_infered_.first->CompileToBinary(nbg_buf.data(), &nbg_size_);
         if (!compiled_) {
           TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "compile to binary failed");
           return kTfLiteDelegateError;
         }
-        fs_.write(nbg_buf.get(),nbg_size_);
+        fs_.write(reinterpret_cast<const char*>(nbg_buf.data()),nbg_size_);
         fs_.close();
     } else {
       compiled_ = layout_infered_.first->Compile();
