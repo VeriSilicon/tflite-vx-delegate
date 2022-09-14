@@ -829,7 +829,7 @@ struct Conv2dMapper : public Conv2dKind<TfLiteConvParams> {
     uint32_t kernel_h = inputs[1]->GetShape()[2];
     uint32_t kernel_w = inputs[1]->GetShape()[1];
     const auto builtin = reinterpret_cast<const TfLiteConvParams*>(params);
-    std::shared_ptr<tim::vx::DirectMapOp> op;
+    std::shared_ptr<tim::vx::Operation> op;
     if (inputs[0]->GetShape()[0] == inputs[1]->GetShape()[0]) {
       TFLITE_LOG(TFLITE_LOG_INFO, "Creating Conv2d op");
       op = delegate->GetGraph()->CreateOperation<tim::vx::ops::Conv2d>(
