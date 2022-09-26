@@ -32,7 +32,7 @@ endif()
 include_directories(${TFLITE_SOURCE_DIR}/delegates/external)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../)
 
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 14)
 add_executable(minimal
   minimal.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/../util.cc
