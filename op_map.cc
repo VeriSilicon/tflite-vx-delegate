@@ -43,6 +43,7 @@
 #include "tim/vx/ops.h"
 #include "utils.h"
 #include "vsi_npu_custom_op.h"
+#include "delegate_main.h"
 
 using namespace tflite;
 using namespace tflite::ops::builtin;
@@ -2747,6 +2748,35 @@ struct Conv3dMapper : public Conv3dKind<TfLiteConv3DParams> {
   }
 };
 
+struct ShapeMapper : public OpMapperBase<TfLiteShapeParams> {
+  bool IsOpSupported(TfLiteContext* context,
+                     TfLiteNode* node,
+                     const TfLiteRegistration* registration) const {
+    auto input_tensor = context->tensors[node->inputs->data[0]];
+    for (int i = 0; i < input_tensor.dims->size; i++) {
+      if (input_tensor.dims->data[i] <= 0) {
+        TFLITE_LOG_PROD(TFLITE_LOG_WARNING,
+                        "Negative shape values are not supported.");
+        return false;
+      }
+    }
+    return true;
+  }
+  bool HandleMapOp(vx::delegate::Delegate* delegate,
+                   std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
+                   std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
+                   const void* params) override {
+    TFLITE_LOG(TFLITE_LOG_INFO, "Creating Shape op");
+    std::vector<uint32_t> shape = inputs[0]->GetShape();
+    tim::vx::TensorSpec shape_spec(tim::vx::DataType::INT32,
+                                   {shape.size()},
+                                   tim::vx::TensorAttribute::CONSTANT);
+    auto shape_tensor = delegate->GetGraph()->CreateTensor(shape_spec, shape.data());
+    delegate->GetTensors()[delegate->GetOperationOutput(0)] = shape_tensor;
+    return true;
+  }
+};
+
 using createIOpMapItemFunc = std::function<std::unique_ptr<IOpMapper>()>;
 static const std::map<int, createIOpMapItemFunc> reg = {
 #define REGISTER_OP_MAPPER(TFLITE_OP_CODE, MAPPER_TYPE, ...)                  \
@@ -2895,6 +2925,7 @@ static const std::map<int, createIOpMapItemFunc> reg = {
     REGISTER_OP_MAPPER(
         kTfLiteBuiltinArgMax, ArgOpMapper<tim::vx::ops::ArgMax>, "Max"),
     REGISTER_OP_MAPPER(kTfLiteBuiltinConv3d, Conv3dMapper),
+    REGISTER_OP_MAPPER(kTfLiteBuiltinShape, ShapeMapper),
 
 #undef REGISTER_OP_MAPPER
 };

@@ -159,9 +159,7 @@ tim::vx::DataType TfLiteDtypeToVsiDtype(TfLiteType type) {
 }
 
 bool IsConstTensor(const TfLiteTensor* tensor) {
-  const uint8_t* tensor_data =
-      reinterpret_cast<const uint8_t*>(tensor->data.raw_const);
-  return tensor_data != nullptr;
+  return tensor->allocation_type == kTfLiteMmapRo? true : false;
 }
 
 bool IsVariableTensor(const TfLiteTensor* tensor) {
@@ -554,6 +552,7 @@ TfLiteStatus Delegate::Invoke(const OpData& op_data,
 
     // create op
     for (const auto& op_info : operations_) {
+      op_info_ = op_info;
       auto& builtin_code = op_info.builtin_code;
       auto& custom_name = op_info.custom_name;
       auto inputs = op_info.inputs;

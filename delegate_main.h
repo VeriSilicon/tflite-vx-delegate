@@ -114,6 +114,7 @@ class Delegate {
   void CreateCacheOp(const OpData& op_data);
 
   std::vector<std::shared_ptr<tim::vx::Operation>>& GetOps() { return ops_; }
+  int GetOperationOutput(uint32_t index) { return op_info_.outputs[index]; }
   std::shared_ptr<tim::vx::Graph>& GetGraph() { return graph_; }
   std::map<int32_t, std::shared_ptr<tim::vx::Tensor>>& GetTensors() {
     return tensors_;
@@ -148,6 +149,7 @@ class Delegate {
   std::map<int32_t, std::shared_ptr<tim::vx::Tensor>> state_tensors_;
   std::vector<std::shared_ptr<tim::vx::Operation>> ops_;
   std::vector<OperationDataType> operations_;
+  struct OperationDataType op_info_;
   bool compiled_;
 
   absl::optional<bool> is_cache_present_;
