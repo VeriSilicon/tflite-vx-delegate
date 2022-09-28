@@ -33,21 +33,20 @@ jobs:
       run: |
         cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DTFLITE_KERNEL_TEST=ON
         cd ${{github.workspace}}/build/_deps/tensorflow-src
-        git checkout v2.9.0 
-        patch -p1 < ${{github.workspace}}/patches/kernel_test.patch
-        patch -p1 < ${{github.workspace}}/patches/acc_correction.patch
+        patch -p1 < ${{github.workspace}}/patches/tf_2_10_kernel_test.patch
+        patch -p1 < ${{github.workspace}}/patches/tf_2_10_acc_correction.patch
         cd ${{github.workspace}}/build/nsync && git checkout v1.24.0
         cd ${{github.workspace}}/build/re2 && git checkout 2022-02-01
         
     - name: Perform CodeQL Analysis
       if: ${{ env.CODEQL_CHECK != 'Off' }}
       uses: github/codeql-action/analyze@v2
-    
+
     - name: build
       # Build your program with the given configuration
       run: |
         cd ${{github.workspace}}/build && make all -j12
-        
+  
     - name: do kernel test
       id: kernel_test
       run: |   
