@@ -33,6 +33,8 @@ project(tflite_vx_delegate)
 OPTION(ENABLE_NBG_SUPPORT "enable customized nbg op in tflite" ON)
 
 set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 if(ANDROID_TOOLCHAIN)
 # bypass warning as error since tensorflow lite can not pass with android ndk r22b
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error -Wno-c++11-narrowing")

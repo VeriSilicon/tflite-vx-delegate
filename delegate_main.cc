@@ -79,6 +79,7 @@ TfLiteRegistration DelegateNodeRegistration() {
   r.profiling_string = nullptr;
   r.builtin_code = kTfLiteBuiltinDelegate;
   r.version = 1;
+  r.registration_external = nullptr;
 
   return r;
 }
