@@ -397,6 +397,28 @@ struct OpMapperBase : public vx::op_map::IOpMapper {
 namespace vx {
 namespace op_map {
 
+bool read_data(const std::shared_ptr<tim::vx::Tensor>& tensor, std::vector<uint8_t>& data) {
+  /* data type is always uint8 because CopyDataFromTensor will ignore data type.*/
+  switch (tensor->GetDataType())
+  {
+  case tim::vx::DataType::INT16  :
+  case tim::vx::DataType::UINT16 :
+  case tim::vx::DataType::FLOAT16:
+    data.resize(data.size() * 2);
+    break;
+  case tim::vx::DataType::INT32  :
+  case tim::vx::DataType::UINT32 :
+  case tim::vx::DataType::FLOAT32:
+    data.resize(data.size() * 4);
+    break;
+  default:
+    TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "Not supported type.");
+    break;
+  }
+  assert(tensor->CopyDataFromTensor(data.data()));
+  return true;
+};
+
 template <typename T_OperationType>
 struct SimpleOpMapper : public OpMapperBase<EmptyStructPlaceholder> {
   std::string name_;
@@ -656,7 +678,6 @@ struct SimpleOpWithFusedActiovationMapper
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
                    const void* params) override {
     TFLITE_LOG(TFLITE_LOG_INFO, "Creating %s op", name_.c_str());
-
     bool boradcast_required = (inputs[0]->GetShape() != inputs[1]->GetShape());
     std::vector<std::shared_ptr<tim::vx::Tensor>> elementwise_inputs;
     if (boradcast_required) {
@@ -689,12 +710,51 @@ struct SimpleOpWithFusedActiovationMapper
         elementwise_inputs.push_back(inputs[1]);
       }
     }
+    if (inputs[0]->IsConstTensor()) {
+      auto ctx = tim::vx::Context::Create();
+      auto graph = ctx->CreateGraph();
 
-    auto op = delegate->GetGraph()->CreateOperation<T_OperationType>();
-    boradcast_required ? (*op).BindInputs(elementwise_inputs)
-                   : (*op).BindInputs(inputs);
-    (*op).BindOutputs(outputs);
-    delegate->GetOps().push_back(std::move(op));
+      int total_input = 1;
+      for (int i = 0; i < inputs[0]->GetShape().size(); ++i) {
+        total_input *= inputs[0]->GetShape()[i];
+      }
+      std::vector<uint8_t> in(total_input);
+      assert(read_data(inputs[0], in));
+      auto input_tensor = graph->CreateTensor(inputs[0]->GetSpec(), in.data());
+      total_input = 1;
+      for (int i = 0; i < inputs[1]->GetShape().size(); ++i) {
+        total_input *= inputs[1]->GetShape()[i];
+      }
+      in.resize(total_input);
+      assert(read_data(inputs[1], in));
+      auto input_tensor_1 = graph->CreateTensor(inputs[1]->GetSpec(), in.data());
+
+      auto output_spec(outputs[0]->GetSpec().SetAttribute(tim::vx::OUTPUT));
+      auto output_tensor = graph->CreateTensor(output_spec);
+
+      auto op = graph->CreateOperation<T_OperationType>();
+      (*op).BindInput(input_tensor).BindInput(input_tensor_1);
+      (*op).BindOutput(output_tensor);
+
+      assert(graph->Compile());
+      assert(graph->Run());
+      int total_output = 1;
+      for (int i = 0; i < outputs[0]->GetShape().size(); ++i) {
+        total_output *= outputs[0]->GetShape()[i];
+      }
+      std::vector<uint8_t> out(total_output);
+      assert(read_data(output_tensor, out));
+      auto const_output_tensor =
+          delegate->GetGraph()->CreateTensor(output_spec.SetAttribute(tim::vx::CONSTANT),
+                              out.data());
+      delegate->GetTensors()[delegate->GetOperationOutput(0)] = const_output_tensor;
+    } else {
+      auto op = delegate->GetGraph()->CreateOperation<T_OperationType>();
+      boradcast_required ? (*op).BindInputs(elementwise_inputs)
+                         : (*op).BindInputs(inputs);
+      (*op).BindOutputs(outputs);
+      delegate->GetOps().push_back(std::move(op));
+    }
 
     return true;
   }
@@ -1300,18 +1360,56 @@ struct StridedSliceMapper : public OpMapperBase<TfLiteStridedSliceParams> {
       end_mask = t;
     }
 
-    auto op = delegate->GetGraph()->CreateOperation<tim::vx::ops::StridedSlice>(
-        begin_dims,
-        end_dims,
-        strides_dims,
-        begin_mask,
-        end_mask,
-        shrink_axis_mask);
-    (*op).BindInput(input_tensor);
-    (*op).BindOutput(output_tensor);
+    if (inputs[0]->IsConstTensor()) {
+      auto ctx = tim::vx::Context::Create();
+      auto graph = ctx->CreateGraph();
 
-    delegate->GetOps().push_back(std::move(op));
+      int total_input = 1;
+      for (int i = 0; i < inputs[0]->GetShape().size(); ++i) {
+        total_input *= inputs[0]->GetShape()[i];
+      }
+      std::vector<uint8_t> in(total_input);
+      assert(read_data(inputs[0], in));
+      auto input_tensor = graph->CreateTensor(inputs[0]->GetSpec(), in.data());
 
+      auto output_spec(outputs[0]->GetSpec().SetAttribute(tim::vx::OUTPUT));
+      auto output_tensor = graph->CreateTensor(output_spec);
+      auto op =
+          graph->CreateOperation<tim::vx::ops::StridedSlice>(begin_dims,
+                                                             end_dims,
+                                                             strides_dims,
+                                                             begin_mask,
+                                                             end_mask,
+                                                             shrink_axis_mask);
+      (*op).BindInput(input_tensor);
+      (*op).BindOutput(output_tensor);
+
+      assert(graph->Compile());
+      assert(graph->Run());
+      int total_output = 1;
+      for (int i = 0; i < outputs[0]->GetShape().size(); ++i) {
+        total_output *= outputs[0]->GetShape()[i];
+      }
+      std::vector<uint8_t> out(total_output);
+      assert(read_data(output_tensor, out));
+      auto const_output_tensor =
+          delegate->GetGraph()->CreateTensor(output_spec.SetAttribute(tim::vx::CONSTANT),
+                              out.data());
+      delegate->GetTensors()[delegate->GetOperationOutput(0)] = const_output_tensor;
+    } else {
+      auto op =
+          delegate->GetGraph()->CreateOperation<tim::vx::ops::StridedSlice>(
+              begin_dims,
+              end_dims,
+              strides_dims,
+              begin_mask,
+              end_mask,
+              shrink_axis_mask);
+      (*op).BindInput(input_tensor);
+      (*op).BindOutput(output_tensor);
+
+      delegate->GetOps().push_back(std::move(op));
+    }
     return true;
   }
 };
@@ -2534,17 +2632,6 @@ struct LogicalOpMapper : public OpMapperBase<EmptyStructPlaceholder> {
 };
 
 struct PackMapper : public OpMapperBase<TfLitePackParams> {
-  virtual bool IsOpSupported(TfLiteContext* context,
-                             TfLiteNode* node,
-                             const TfLiteRegistration* registration) const {
-    auto input_tensor = context->tensors[node->inputs->data[0]];
-    if (input_tensor.type == kTfLiteInt32 ||
-        (input_tensor.dims->size == 1 && (input_tensor.type == kTfLiteInt8 ||
-                                          input_tensor.type == kTfLiteUInt8))) {
-      return false;
-    }
-    return true;
-  }
   bool HandleMapOp(vx::delegate::Delegate* delegate,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
@@ -2553,13 +2640,76 @@ struct PackMapper : public OpMapperBase<TfLitePackParams> {
     const auto builtin = reinterpret_cast<const TfLitePackParams*>(params);
     uint32_t axis = vx::delegate::utils::ConvertAxis(
         builtin->axis, inputs[0]->GetShape().size() + 1);
+    bool is_all_const = true;
+    for (int i=0; i<inputs.size(); ++i){
+      if(!inputs[i]->IsConstTensor()){
+        is_all_const = false;
+        break;
+      }
+    }
+    if (is_all_const) {
+      auto ctx = tim::vx::Context::Create();
+      auto graph = ctx->CreateGraph();
 
-    auto op = delegate->GetGraph()->CreateOperation<tim::vx::ops::Stack>(
-        axis, inputs.size());
-    (*op).BindInputs(inputs);
-    (*op).BindOutputs(outputs);
-    delegate->GetOps().push_back(std::move(op));
+      int total_input = 1;
+      for (int i = 0; i < inputs[0]->GetShape().size(); ++i) {
+        total_input *= inputs[0]->GetShape()[i];
+      }
+      std::vector<uint8_t> in(total_input);
+      assert(read_data(inputs[0], in));
+      auto input_tensor = graph->CreateTensor(inputs[0]->GetSpec(), in.data());
 
+      total_input = 1;
+      for (int i = 0; i < inputs[1]->GetShape().size(); ++i) {
+        total_input *= inputs[1]->GetShape()[i];
+      }
+      in.resize(total_input);
+      assert(read_data(inputs[1], in));
+      auto input_tensor_1 = graph->CreateTensor(inputs[1]->GetSpec(), in.data());
+
+      total_input = 1;
+      for (int i = 0; i < inputs[2]->GetShape().size(); ++i) {
+        total_input *= inputs[2]->GetShape()[i];
+      }
+      in.resize(total_input);
+      assert(read_data(inputs[2], in));
+      auto input_tensor_2 = graph->CreateTensor(inputs[2]->GetSpec(), in.data());
+
+      total_input = 1;
+      for (int i = 0; i < inputs[3]->GetShape().size(); ++i) {
+        total_input *= inputs[3]->GetShape()[i];
+      }
+      in.resize(total_input);
+      assert(read_data(inputs[3], in));
+      auto input_tensor_3 = graph->CreateTensor(inputs[3]->GetSpec(), in.data());
+
+      auto output_spec(outputs[0]->GetSpec().SetAttribute(tim::vx::OUTPUT));
+      auto output_tensor = graph->CreateTensor(output_spec);
+      auto op = graph->CreateOperation<tim::vx::ops::Stack>(axis, inputs.size());
+      (*op).BindInputs({input_tensor, input_tensor_1, input_tensor_2, input_tensor_3});
+      (*op).BindOutput(output_tensor);
+
+      assert(graph->Compile());
+      assert(graph->Run());
+
+      int total_output = 1;
+      for (int i = 0; i < outputs[0]->GetShape().size(); ++i) {
+        total_output *= outputs[0]->GetShape()[i];
+      }
+      std::vector<uint8_t> out(total_output);
+      assert(read_data(output_tensor, out));
+      auto const_output_tensor =
+          delegate->GetGraph()->CreateTensor(output_spec.SetAttribute(tim::vx::CONSTANT),
+                              out.data());
+      delegate->GetTensors()[delegate->GetOperationOutput(0)] =
+          const_output_tensor;
+    } else {
+      auto op = delegate->GetGraph()->CreateOperation<tim::vx::ops::Stack>(
+          axis, inputs.size());
+      (*op).BindInputs(inputs);
+      (*op).BindOutputs(outputs);
+      delegate->GetOps().push_back(std::move(op));
+    }
     return true;
   }
 };
