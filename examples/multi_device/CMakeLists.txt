@@ -40,7 +40,6 @@ add_executable(multi_device
 target_link_libraries(multi_device
   tensorflow-lite
   vx_custom_op
-  vx_delegate
   ${CMAKE_DL_LIBS}
 )
 
