@@ -40,7 +40,6 @@ add_executable(minimal
 target_link_libraries(minimal
   TensorFlow::tensorflow-lite
   vx_custom_op
-  vx_delegate
   ${CMAKE_DL_LIBS}
 )
 
