@@ -1,9 +1,3 @@
-commit f20735f70b4c82a90250e1122ff675b650e4c58f
-Author: Feiyue Chen <Feiyue.Chen@verisilicon.com>
-Date:   Sat Oct 8 18:01:13 2022 +0800
-
-    fix building err
-
 diff --git a/tensorflow/lite/kernels/CMakeLists.txt b/tensorflow/lite/kernels/CMakeLists.txt
 index 61788660d73..416ea839a0e 100644
 --- a/tensorflow/lite/kernels/CMakeLists.txt
@@ -85,6 +79,19 @@ index 61788660d73..416ea839a0e 100644
    acceleration_test_util_internal_test.cc
    activations_test.cc
    add_n_test.cc
+diff --git a/tensorflow/lite/tools/cmake/modules/Findgoogletest.cmake b/tensorflow/lite/tools/cmake/modules/Findgoogletest.cmake
+index 4fe0b18b040..1f9916da229 100644
+--- a/tensorflow/lite/tools/cmake/modules/Findgoogletest.cmake
++++ b/tensorflow/lite/tools/cmake/modules/Findgoogletest.cmake
+@@ -22,7 +22,7 @@ include(OverridableFetchContent)
+ OverridableFetchContent_Declare(
+   googletest
+   GIT_REPOSITORY https://github.com/google/googletest.git
+-  GIT_TAG release-1.10.0
++  GIT_TAG release-1.12.0
+   GIT_SHALLOW TRUE
+   GIT_PROGRESS TRUE
+   SOURCE_DIR "${CMAKE_BINARY_DIR}/googletest"
 diff --git a/tensorflow/lite/tools/cmake/modules/flatbuffers.cmake b/tensorflow/lite/tools/cmake/modules/flatbuffers.cmake
 index a9505ed54a6..2a17703c148 100644
 --- a/tensorflow/lite/tools/cmake/modules/flatbuffers.cmake
