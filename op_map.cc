@@ -2077,6 +2077,263 @@ struct UnidirectionalSequenceLstm : public OpMapperBase<TfLiteUnidirectionalSequ
   }
 };
 
+struct BidirectionalSequenceLstm : public OpMapperBase<TfLiteBidirectionalSequenceLSTMParams> {
+
+  // Input Tensors
+  constexpr  static int kInputTensor = 0;
+
+  // Forward LSTM cell tensors.
+  // Input weight tensors of size: {n_cell, n_input}
+  constexpr static int kFwInputToInputWeightsTensor = 1;  // Optional
+  constexpr static int kFwInputToForgetWeightsTensor = 2;
+  constexpr static int kFwInputToCellWeightsTensor = 3;
+  constexpr static int kFwInputToOutputWeightsTensor = 4;
+
+  // Recurrent weight tensors of size {n_cell, n_output}
+  constexpr static int kFwRecurrentToInputWeightsTensor = 5;  // Optional
+  constexpr static int kFwRecurrentToForgetWeightsTensor = 6;
+  constexpr static int kFwRecurrentToCellWeightsTensor = 7;
+  constexpr static int kFwRecurrentToOutputWeightsTensor = 8;
+
+  // Peephole weights tensors of size {n_cell}, representing a diagonal matrix.
+  constexpr static int kFwCellToInputWeightsTensor = 9;    // Optional
+  constexpr static int kFwCellToForgetWeightsTensor = 10;  // Optional
+  constexpr static int kFwCellToOutputWeightsTensor = 11;  // Optional
+
+  // Gates bias tensors of size {n_cell}
+  constexpr static int kFwInputGateBiasTensor = 12;  // Optional
+  constexpr static int kFwForgetGateBiasTensor = 13;
+  constexpr static int kFwCellGateBiasTensor = 14;
+  constexpr static int kFwOutputGateBiasTensor = 15;
+
+  // Projection weight tensor of size {n_output, n_cell}
+  constexpr static int kFwProjectionWeightsTensor = 16;  // Optional
+  // Projection bias tensor of size {n_output}
+  constexpr static int kFwProjectionBiasTensor = 17;  // Optional
+
+  // Backward LSTM cell tensors.
+  // Input weight tensors of size: {n_cell, n_input}
+  constexpr static int kBwInputToInputWeightsTensor = 18;  // Optional
+  constexpr static int kBwInputToForgetWeightsTensor = 19;
+  constexpr static int kBwInputToCellWeightsTensor = 20;
+  constexpr static int kBwInputToOutputWeightsTensor = 21;
+
+  // Recurrent weight tensors of size {n_cell, n_output}
+  constexpr static int kBwRecurrentToInputWeightsTensor = 22;  // Optional
+  constexpr static int kBwRecurrentToForgetWeightsTensor = 23;
+  constexpr static int kBwRecurrentToCellWeightsTensor = 24;
+  constexpr static int kBwRecurrentToOutputWeightsTensor = 25;
+
+  // Peephole weights tensors of size {n_cell}, representing a diagonal matrix.
+  constexpr static int kBwCellToInputWeightsTensor = 26;   // Optional
+  constexpr static int kBwCellToForgetWeightsTensor = 27;  // Optional
+  constexpr static int kBwCellToOutputWeightsTensor = 28;  // Optional
+
+  // Gates bias tensors of size {n_cell}
+  constexpr static int kBwInputGateBiasTensor = 29;  // Optional
+  constexpr static int kBwForgetGateBiasTensor = 30;
+  constexpr static int kBwCellGateBiasTensor = 31;
+  constexpr static int kBwOutputGateBiasTensor = 32;
+
+  // Projection weight tensor of size {n_output, n_cell}
+  constexpr static int kBwProjectionWeightsTensor = 33;  // Optional
+  // Projection bias tensor of size {n_output}
+  constexpr static int kBwProjectionBiasTensor = 34;  // Optional
+
+  // Stateful input tensors that are variables and will be modified by the Op.
+  // Activation state tensors of size {n_batch, n_output}
+  constexpr static int kFwInputActivationStateTensor = 35;
+  // Cell state tensors of size {n_batch, n_cell}
+  constexpr static int kFwInputCellStateTensor = 36;
+  // Activation state tensors of size {n_batch, n_output}
+  constexpr static int kBwInputActivationStateTensor = 37;
+  // Cell state tensors of size {n_batch, n_cell}
+  constexpr static int kBwInputCellStateTensor = 38;
+
+  // Used as auxiliary input and weights 
+  constexpr static int kAuxInputTensor = 39;  // Optional
+  // Forward weights.
+  constexpr static int kFwAuxInputToInputWeightsTensor = 40;   // Optional
+  constexpr static int kFwAuxInputToForgetWeightsTensor = 41;  // Optional
+  constexpr static int kFwAuxInputToCellWeightsTensor = 42;    // Optional
+  constexpr static int kFwAuxInputToOutputWeightsTensor = 43;  // Optional
+  // Backward weights.
+  constexpr static int kBwAuxInputToInputWeightsTensor = 44;   // Optional
+  constexpr static int kBwAuxInputToForgetWeightsTensor = 45;  // Optional
+  constexpr static int kBwAuxInputToCellWeightsTensor = 46;    // Optional
+  constexpr static int kBwAuxInputToOutputWeightsTensor = 47;  // Optional
+
+  // Output tensors.
+  constexpr static int kFwOutputTensor = 0;
+  constexpr static int kBwOutputTensor = 1;  // Ignored if merge_outputs is set.
+
+  bool IsOpSupported(TfLiteContext* context,
+                     TfLiteNode* node,
+                     const TfLiteRegistration* registration) const {
+    int i2i_index = node->inputs->data[kFwInputToInputWeightsTensor];
+    int fwprojection_weights_index = node->inputs->data[kFwProjectionWeightsTensor];
+    int fwaux_weight_index = node->inputs->data[kFwAuxInputToCellWeightsTensor];
+   
+    if ( context->tensors[i2i_index].type != kTfLiteFloat32 ){
+       TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
+                      "Quantized weights are not supported");
+       return false;
+    }
+    if ( fwprojection_weights_index != -1 ){
+       TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
+                      "Projection weights are not supported");
+       return false;
+    }
+    if ( fwaux_weight_index != -1 ){
+       TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
+                      "Aux weights are not supported");
+       return false;
+    }
+    
+    return true;
+  }
+
+  bool HandleMapOp(vx::delegate::Delegate* delegate,
+                   std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
+                   std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
+                   const void* params) override {
+    TFLITE_LOG(TFLITE_LOG_INFO, "Create BidirectionalSequenceLstm op");
+    const auto builtin = reinterpret_cast<const TfLiteBidirectionalSequenceLSTMParams*>(params);
+    float cell_clip = builtin -> cell_clip;
+    float proj_clip = builtin -> proj_clip;
+    tim::vx::ops::BidirectionalSequenceLstm::ActivationType act;
+    float forget_bias = 0;
+    bool time_major = builtin -> time_major;
+    tim::vx::ops::BidirectionalSequenceLstm::ActivationType recurrent_act_type = tim::vx::ops::BidirectionalSequenceLstm::kSIGMOID;
+    bool return_sequences = true;
+    switch (builtin -> activation)
+    {
+    case kTfLiteActRelu:
+      act = tim::vx::ops::BidirectionalSequenceLstm::kRELU;
+      break;
+    case kTfLiteActRelu6:
+      act = tim::vx::ops::BidirectionalSequenceLstm::kRELU6;
+      break;
+    case kTfLiteActTanh:
+      act = tim::vx::ops::BidirectionalSequenceLstm::kTANH;
+      break;
+    case kTfLiteActSigmoid:
+      act = tim::vx::ops::BidirectionalSequenceLstm::kSIGMOID;
+      break;
+    default:
+      printf("Not supported activition type for BidirectionalSequenceLstm = %d", static_cast<int32_t>(builtin -> activation));
+      break;
+    }
+    auto op = delegate->GetGraph()->CreateOperation<tim::vx::ops::BidirectionalSequenceLstm>(
+        cell_clip, proj_clip, act, forget_bias, time_major, recurrent_act_type, return_sequences);
+    auto tensor_placeholder = delegate->GetGraph()->CreateTensorPlaceHolder();
+  
+    std::vector<std::shared_ptr<tim::vx::Tensor>> input_tensors = {
+      inputs[kInputTensor],
+
+      // Forward LSTM cell tennsors
+      // Input weight tensors 
+      inputs[kFwInputToInputWeightsTensor],
+      inputs[kFwInputToForgetWeightsTensor],
+      inputs[kFwInputToCellWeightsTensor ],
+      inputs[kFwInputToOutputWeightsTensor ],
+
+      // Recurrent weight tensors
+      inputs[kFwRecurrentToInputWeightsTensor],
+      inputs[kFwRecurrentToForgetWeightsTensor ],
+      inputs[kFwRecurrentToCellWeightsTensor ],
+      inputs[kFwRecurrentToOutputWeightsTensor ],
+
+      // peephole weights : optional
+      inputs[kFwCellToInputWeightsTensor ],
+      inputs[kFwCellToForgetWeightsTensor ],
+      inputs[kFwCellToOutputWeightsTensor ],
+
+      // gate bias : optional
+      inputs[kFwInputGateBiasTensor ],
+      inputs[kFwForgetGateBiasTensor ],
+      inputs[kFwCellGateBiasTensor ],
+      inputs[kFwOutputGateBiasTensor ],
+
+      // Projection : optional
+      inputs[kFwProjectionWeightsTensor ],
+      inputs[kFwProjectionBiasTensor ],
+
+      // Backward LSTM cell tensors
+      // Input weight tensors
+      inputs[kBwInputToInputWeightsTensor],
+      inputs[kBwInputToForgetWeightsTensor],
+      inputs[kBwInputToCellWeightsTensor ],
+      inputs[kBwInputToOutputWeightsTensor ],
+
+      // Recurrent weight tensors
+      inputs[kBwRecurrentToInputWeightsTensor],
+      inputs[kBwRecurrentToForgetWeightsTensor ],
+      inputs[kBwRecurrentToCellWeightsTensor ],
+      inputs[kBwRecurrentToOutputWeightsTensor ],
+
+      // peephole weights : optional
+      inputs[kBwCellToInputWeightsTensor ],
+      inputs[kBwCellToForgetWeightsTensor ],
+      inputs[kBwCellToOutputWeightsTensor ],
+
+      // gate bias : optional
+      inputs[kBwInputGateBiasTensor ],
+      inputs[kBwForgetGateBiasTensor ],
+      inputs[kBwCellGateBiasTensor ],
+      inputs[kBwOutputGateBiasTensor ],
+     
+      // Projection : optional
+      inputs[kBwProjectionWeightsTensor ],
+      inputs[kBwProjectionBiasTensor ], 
+      
+      // State Tensor
+      inputs[kFwInputActivationStateTensor],
+      inputs[kFwInputCellStateTensor],
+      inputs[kBwInputActivationStateTensor],
+      inputs[kBwInputCellStateTensor],
+
+      // Aux
+      inputs[kAuxInputTensor],
+      inputs[kFwAuxInputToInputWeightsTensor],
+      inputs[kFwAuxInputToForgetWeightsTensor],
+      inputs[kFwAuxInputToCellWeightsTensor],
+      inputs[kFwAuxInputToOutputWeightsTensor],
+      inputs[kBwAuxInputToInputWeightsTensor],
+      inputs[kBwAuxInputToForgetWeightsTensor],
+      inputs[kBwAuxInputToCellWeightsTensor],
+      inputs[kBwAuxInputToOutputWeightsTensor],
+     
+     // LayerNorm :not used
+      tensor_placeholder,
+      tensor_placeholder,
+      tensor_placeholder,
+      tensor_placeholder,
+      tensor_placeholder,
+      tensor_placeholder,
+      tensor_placeholder,
+      tensor_placeholder,
+    };
+
+    std::vector<std::shared_ptr<tim::vx::Tensor>> output_tensors={
+      outputs[kFwOutputTensor],
+      tensor_placeholder,
+      tensor_placeholder,
+      outputs[kBwOutputTensor],
+      tensor_placeholder,
+      tensor_placeholder,
+    };
+    (*op).BindInputs(
+      input_tensors
+      );
+    (*op).BindOutputs(output_tensors);
+
+    delegate->GetOps().push_back(std::move(op));
+
+    return true;
+   } //HandleMapOp
+  };
+
 struct Batch2Space : public OpMapperBase<TfLiteBatchToSpaceNDParams> {
   virtual bool IsOpSupported(TfLiteContext* context,
                              TfLiteNode* node,
@@ -2887,6 +3144,8 @@ static const std::map<int, createIOpMapItemFunc> reg = {
     REGISTER_OP_MAPPER(kTfLiteBuiltinGatherNd, GatherNd),
     REGISTER_OP_MAPPER(kTfLiteBuiltinUnidirectionalSequenceLstm,
                        UnidirectionalSequenceLstm),
+    REGISTER_OP_MAPPER(kTfLiteBuiltinBidirectionalSequenceLstm,
+                       BidirectionalSequenceLstm),
     REGISTER_OP_MAPPER(kTfLiteBuiltinBatchToSpaceNd, Batch2Space),
     REGISTER_OP_MAPPER(kTfLiteBuiltinSpaceToBatchNd, Space2Batch),
     REGISTER_OP_MAPPER(kTfLiteBuiltinReverseV2, ReverseV2),
