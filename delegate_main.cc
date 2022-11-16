@@ -582,7 +582,7 @@ TfLiteStatus Delegate::Invoke(const OpData& op_data,
           }
           tensors_[tensor_idx] = CreateTensor(graph_, tensor, attr, perm);
         }
-        else if (-1 == tensor_idx && builtin_code == 44){
+        else if (-1 == tensor_idx && (builtin_code == 44 || builtin_code == 52) ){
           // -1 means placeholder for optional inputs: for example LSTM
           if (tensors_.find(placeholder_tensor_idx_) != tensors_.end()) {
             // Assert(false);
