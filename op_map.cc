@@ -1877,6 +1877,117 @@ struct Rnn : public OpMapperBase<TfLiteRNNParams> {
   }
 };
 
+struct BidirectionalSequenceRnn : public OpMapperBase<TfLiteBidirectionalSequenceRNNParams>{
+  constexpr static int kInputTensor = 0;
+  // Forward and backward cell tensors.
+  constexpr static int kFwWeightsTensor = 1;
+  constexpr static int kFwRecurrentWeightsTensor = 2;
+  constexpr static int kFwBiasTensor = 3;
+  constexpr static int kFwHiddenStateTensor = 4;
+  constexpr static int kBwWeightsTensor = 5;
+  constexpr static int kBwRecurrentWeightsTensor = 6;
+  constexpr static int kBwBiasTensor = 7;
+  constexpr static int kBwHiddenStateTensor = 8;
+  
+  constexpr static int kAuxInputTensor = 9;       // Optional.
+  constexpr static int kFwAuxWeightsTensor = 10;  // Optional.
+  constexpr static int kBwAuxWeightsTensor = 11;  // Optional.
+  // Output tensors.
+  constexpr static int kFwOutputTensor = 0;
+  constexpr static int kBwOutputTensor = 1;  // Only if merge_outputs is false.
+ 
+  bool IsOpSupported(TfLiteContext* context,
+                             TfLiteNode* node,
+                             const TfLiteRegistration* registration ) const{
+    int fw_weights_index = node->inputs->data[kFwWeightsTensor];
+    int aux_input_index = node->inputs->data[kAuxInputTensor];
+    int aux_fw_index = node->inputs->data[kFwAuxWeightsTensor];
+
+    if ( context->tensors[fw_weights_index].type != kTfLiteFloat32 )
+    {
+      TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
+                      "Does not support quantized weight in BidirectionalSequenceRnn");
+       return false;
+    }
+    if ( aux_input_index != -1 && aux_fw_index == -1 )
+    {
+      TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
+                      "Does not support auxiliary inputs without auxiliary weights in BidirectionalSequenceRnn");
+       return false;
+    }
+    return true;
+  } 
+  bool HandleMapOp(vx::delegate::Delegate* delegate,
+                   std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
+                   std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
+                   const void* params) override {
+    TFLITE_LOG(TFLITE_LOG_INFO, "Create BidirectionalSequenceRNN op");
+    const auto builtin = reinterpret_cast<const TfLiteBidirectionalSequenceRNNParams*> (params);
+    bool time_major = builtin -> time_major;
+    tim::vx::ops::BidirectionalSequenceRnn::ActivationType act;
+    bool merge_outputs = builtin -> merge_outputs;
+    switch (builtin -> activation)
+    {
+    case kTfLiteActRelu:
+      act = tim::vx::ops::BidirectionalSequenceRnn::kRELU;
+      break;
+    case kTfLiteActRelu6:
+      act = tim::vx::ops::BidirectionalSequenceRnn::kRELU6;
+      break; 
+    case kTfLiteActTanh:
+      act = tim::vx::ops::BidirectionalSequenceRnn::kTANH;
+      break;
+    case kTfLiteActSigmoid:
+      act = tim::vx::ops::BidirectionalSequenceRnn::kSIGMOID;
+      break;
+    default:
+      printf("Not supported activition type for BidirectionalSequenceRnn = %d", static_cast<int32_t>(builtin -> activation));
+      break;
+    }
+
+    auto op = delegate->GetGraph()->CreateOperation<tim::vx::ops::BidirectionalSequenceRnn>(act, time_major, merge_outputs);
+    auto tensor_placeholder = delegate->GetGraph()->CreateTensorPlaceHolder();
+    
+    std::vector<std::shared_ptr<tim::vx::Tensor>> input_tensors = {
+      inputs[kInputTensor],
+
+      inputs[kFwWeightsTensor],
+      inputs[kFwRecurrentWeightsTensor],
+      inputs[kFwBiasTensor],
+      tensor_placeholder,
+      inputs[kFwHiddenStateTensor],
+    
+      inputs[kBwWeightsTensor],
+      inputs[kBwRecurrentWeightsTensor],
+      inputs[kBwBiasTensor],
+      tensor_placeholder,
+      inputs[kBwHiddenStateTensor],
+    };
+
+    std::vector<std::shared_ptr<tim::vx::Tensor>> output_tensors = {
+      tensor_placeholder,
+      tensor_placeholder,
+      outputs[kFwOutputTensor],
+      merge_outputs ?  tensor_placeholder : outputs[kBwOutputTensor],
+    };
+
+    if (inputs.size() == 12) {
+      // Aux
+      input_tensors.push_back(inputs[kAuxInputTensor]);
+      input_tensors.push_back(inputs[kFwAuxWeightsTensor]);
+      input_tensors.push_back(inputs[kBwAuxWeightsTensor]);
+    }
+  
+    (*op).BindInputs(input_tensors);
+
+    (*op).BindOutputs(output_tensors);
+
+    delegate->GetOps().push_back(std::move(op));
+
+    return true;
+  }
+};
+
 struct Gather : public OpMapperBase<TfLiteGatherParams> {
   virtual bool IsOpSupported(TfLiteContext* context,
                              TfLiteNode* node,
@@ -3136,6 +3247,8 @@ static const std::map<int, createIOpMapItemFunc> reg = {
     REGISTER_OP_MAPPER(kTfLiteBuiltinTranspose, Transpose),
     REGISTER_OP_MAPPER(kTfLiteBuiltinBatchMatmul, BatchMatmul),
     REGISTER_OP_MAPPER(kTfLiteBuiltinRnn, Rnn),
+    REGISTER_OP_MAPPER(
+        kTfLiteBuiltinBidirectionalSequenceRnn, BidirectionalSequenceRnn),
     REGISTER_OP_MAPPER(
         kTfLiteBuiltinNeg, SimpleOpMapper<tim::vx::ops::Neg>, "Neg"),
     REGISTER_OP_MAPPER(
