@@ -1988,6 +1988,81 @@ struct BidirectionalSequenceRnn : public OpMapperBase<TfLiteBidirectionalSequenc
   }
 };
 
+struct UnidirectionalSequenceRnn : public OpMapperBase<TfLiteSequenceRNNParams>{
+  // Input tensors.
+  constexpr static int kInputTensor = 0;
+  constexpr static int kWeightsTensor = 1;
+  constexpr static int kRecurrentWeightsTensor = 2;
+  constexpr static int kBiasTensor = 3;
+  constexpr static int kHiddenStateTensor = 4;
+  // Output tensor.
+  constexpr static int kOutputTensor = 0;
+
+  bool IsOpSupported (TfLiteContext* context,
+                      TfLiteNode* node,
+                      const TfLiteRegistration* registration) const
+  {
+    int weights_index = node->inputs->data[kWeightsTensor];
+    if (context->tensors[weights_index].type != kTfLiteFloat32)
+    {
+      TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
+                     "Does not support quantized weights in UnidirectionalSequenceRnn");
+      return false;
+    }
+    return true;
+  }
+  
+  bool HandleMapOp(vx::delegate::Delegate* delegate,
+                   std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
+                   std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
+                   const void* params) override 
+  {
+    TFLITE_LOG(TFLITE_LOG_INFO, "Create UnidirectionalSequenceRnn op");
+    const auto builtin = reinterpret_cast<const TfLiteSequenceRNNParams*>(params);
+    bool time_major = builtin -> time_major;
+    tim::vx::ops::UnidirectionalSequenceRnn::ActivationType act;
+    switch (builtin -> activation)
+    {
+    case kTfLiteActRelu:
+      act = tim::vx::ops::UnidirectionalSequenceRnn::kRELU;
+      break;
+    case kTfLiteActRelu6:
+      act = tim::vx::ops::UnidirectionalSequenceRnn::kRELU6;
+      break;
+    case kTfLiteActTanh:
+      act = tim::vx::ops::UnidirectionalSequenceRnn::kTANH;
+      break;
+    case kTfLiteActSigmoid:
+      act = tim::vx::ops::UnidirectionalSequenceRnn::kSIGMOID;
+      break;
+    default:
+      printf("Not supported activition type for UnidirectionalSequenceRnn = %d", static_cast<int32_t>(builtin -> activation));
+      break;
+    }
+    auto op = delegate->GetGraph()->CreateOperation<tim::vx::ops::UnidirectionalSequenceRnn>(act, time_major);
+    auto tensor_placeholder =  delegate->GetGraph()->CreateTensorPlaceHolder();
+
+    std::vector<std::shared_ptr<tim::vx::Tensor>> input_tensors = {
+      inputs[kInputTensor],
+      inputs[kWeightsTensor],
+      inputs[kRecurrentWeightsTensor],
+      inputs[kBiasTensor],
+      tensor_placeholder,
+      inputs[kHiddenStateTensor],
+    };
+    std::vector<std::shared_ptr<tim::vx::Tensor>> output_tensor = {
+      tensor_placeholder,
+      outputs[kOutputTensor],
+    };
+    (*op).BindInputs(input_tensors);
+    (*op).BindOutputs(output_tensor);
+
+    delegate->GetOps().push_back(std::move(op));
+    
+    return true;
+  }
+};
+
 struct Gather : public OpMapperBase<TfLiteGatherParams> {
   virtual bool IsOpSupported(TfLiteContext* context,
                              TfLiteNode* node,
@@ -3247,6 +3322,7 @@ static const std::map<int, createIOpMapItemFunc> reg = {
     REGISTER_OP_MAPPER(kTfLiteBuiltinTranspose, Transpose),
     REGISTER_OP_MAPPER(kTfLiteBuiltinBatchMatmul, BatchMatmul),
     REGISTER_OP_MAPPER(kTfLiteBuiltinRnn, Rnn),
+    REGISTER_OP_MAPPER(kTfLiteBuiltinUnidirectionalSequenceRnn, UnidirectionalSequenceRnn),
     REGISTER_OP_MAPPER(
         kTfLiteBuiltinBidirectionalSequenceRnn, BidirectionalSequenceRnn),
     REGISTER_OP_MAPPER(
