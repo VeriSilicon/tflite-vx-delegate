@@ -13,7 +13,7 @@ Dequantize|yes
 EmbeddingLookup|no
 Floor|yes
 FullyConnected|yes
-HashtableLookup|no
+HashtableLookup|yes
 L2Normalization|yes
 L2Pool2d|no
 LocalResponseNormalization|yes
