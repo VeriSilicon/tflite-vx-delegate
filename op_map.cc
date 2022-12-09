@@ -1,26 +1,26 @@
 /****************************************************************************
- *
- *    Copyright (c) 2021 Vivante Corporation
- *
- *    Permission is hereby granted, free of charge, to any person obtaining a
- *    copy of this software and associated documentation files (the "Software"),
- *    to deal in the Software without restriction, including without limitation
- *    the rights to use, copy, modify, merge, publish, distribute, sublicense,
- *    and/or sell copies of the Software, and to permit persons to whom the
- *    Software is furnished to do so, subject to the following conditions:
- *
- *    The above copyright notice and this permission notice shall be included in
- *    all copies or substantial portions of the Software.
- *
- *    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- *    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- *    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
- *THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- *    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- *    FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
- *    DEALINGS IN THE SOFTWARE.
- *
- *****************************************************************************/
+*
+*    Copyright (c) 2021 Vivante Corporation
+*
+*    Permission is hereby granted, free of charge, to any person obtaining a
+*    copy of this software and associated documentation files (the "Software"),
+*    to deal in the Software without restriction, including without limitation
+*    the rights to use, copy, modify, merge, publish, distribute, sublicense,
+*    and/or sell copies of the Software, and to permit persons to whom the
+*    Software is furnished to do so, subject to the following conditions:
+*
+*    The above copyright notice and this permission notice shall be included in
+*    all copies or substantial portions of the Software.
+*
+*    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+*    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+*    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+*    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+*    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+*    FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+*    DEALINGS IN THE SOFTWARE.
+*
+*****************************************************************************/
 
 #include <algorithm>
 #include <array>
@@ -2955,6 +2955,23 @@ struct Select : public OpMapperBase<EmptyStructPlaceholder> {
     return true;
   }
 };
+struct HashtableLookup : public OpMapperBase<EmptyStructPlaceholder> {
+  bool HandleMapOp(vx::delegate::Delegate* delegate,
+                   std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
+                   std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
+                   const void* params) override {
+    TFLITE_LOG(TFLITE_LOG_INFO, "Create HashLookup op");
+
+    auto op = delegate->GetGraph()->CreateOperation<tim::vx::ops::HashtableLookup>();
+
+    (*op).BindInputs(inputs);
+    (*op).BindOutputs(outputs);
+
+    delegate->GetOps().push_back(std::move(op));
+
+    return true;
+  }
+};
 
 template <typename T_OperationType>
 struct LogicalOpMapper : public OpMapperBase<EmptyStructPlaceholder> {
@@ -3374,6 +3391,7 @@ static const std::map<int, createIOpMapItemFunc> reg = {
         kTfLiteBuiltinArgMax, ArgOpMapper<tim::vx::ops::ArgMax>, "Max"),
     REGISTER_OP_MAPPER(kTfLiteBuiltinConv3d, Conv3dMapper),
     REGISTER_OP_MAPPER(kTfLiteBuiltinShape, ShapeMapper),
+    REGISTER_OP_MAPPER(kTfLiteBuiltinHashtableLookup, HashtableLookup),
 
 #undef REGISTER_OP_MAPPER
 };
