@@ -2955,6 +2955,38 @@ struct Select : public OpMapperBase<EmptyStructPlaceholder> {
     return true;
   }
 };
+
+struct EmbeddingLookup : public OpMapperBase<EmptyStructPlaceholder> {
+  bool IsOpSupported(TfLiteContext* context,
+                     TfLiteNode* node,
+                     const TfLiteRegistration* registration) const override {
+    int weight_index = node->inputs->data[1];
+    int out_index = node->outputs->data[0];
+    if (context->tensors[weight_index].type == kTfLiteUInt8 &&
+      context->tensors[out_index].type == kTfLiteInt8){
+      TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
+           "Does not support hybrid quantization with U8 weight and I8 output");
+      return false;
+    }
+    return true;
+  }
+  bool HandleMapOp (vx::delegate::Delegate* delegate,
+                    std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
+                    std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
+                    const void* params) override {
+    TFLITE_LOG(TFLITE_LOG_INFO, "Create EmbeddingLookup op");
+
+    auto op = delegate->GetGraph()->CreateOperation<tim::vx::ops::EmbeddingLookup>();
+
+    (*op).BindInputs(inputs);
+    (*op).BindOutputs(outputs);
+
+    delegate->GetOps().push_back(std::move(op));
+
+    return true;
+  }
+};
+
 struct HashtableLookup : public OpMapperBase<EmptyStructPlaceholder> {
   bool HandleMapOp(vx::delegate::Delegate* delegate,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
@@ -3391,6 +3423,7 @@ static const std::map<int, createIOpMapItemFunc> reg = {
         kTfLiteBuiltinArgMax, ArgOpMapper<tim::vx::ops::ArgMax>, "Max"),
     REGISTER_OP_MAPPER(kTfLiteBuiltinConv3d, Conv3dMapper),
     REGISTER_OP_MAPPER(kTfLiteBuiltinShape, ShapeMapper),
+    REGISTER_OP_MAPPER(kTfLiteBuiltinEmbeddingLookup, EmbeddingLookup),
     REGISTER_OP_MAPPER(kTfLiteBuiltinHashtableLookup, HashtableLookup),
 
 #undef REGISTER_OP_MAPPER
