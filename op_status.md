@@ -10,7 +10,7 @@ Conv2d       |yes
 DepthwiseConv2d|yes
 DepthToSpace|yes
 Dequantize|yes
-EmbeddingLookup|no
+EmbeddingLookup|yes
 Floor|yes
 FullyConnected|yes
 HashtableLookup|yes
