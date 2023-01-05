@@ -2136,14 +2136,20 @@ struct UnidirectionalSequenceLstm : public OpMapperBase<TfLiteUnidirectionalSequ
   bool IsOpSupported(TfLiteContext* context,
                      TfLiteNode* node,
                      const TfLiteRegistration* registration) const {
-    int h_state_index = node->inputs->data[lstm::full::kOutputStateTensor];
-    int c_state_index = node->inputs->data[lstm::full::kCellStateTensor];
     int input_index = node->inputs->data[lstm::full::kInputTensor];
     int output_index = node->outputs->data[lstm::full::kOutputTensor];
-    if (!(context->tensors[input_index].type == kTfLiteUInt8 ||
+    int I2F_weight_index = node->inputs->data[lstm::full::kInputToForgetWeightsTensor];
+    int h_state_index = node->inputs->data[lstm::full::kOutputStateTensor];
+    int c_state_index = node->inputs->data[lstm::full::kCellStateTensor];
+    if ((context->tensors[I2F_weight_index].type != kTfLiteFloat32)) {
+      TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
+                      "UnidirectionalLstm dose not support quantized weight");
+      return false;
+    }
+    if ((context->tensors[input_index].type == kTfLiteUInt8 ||
           context->tensors[input_index].type == kTfLiteInt8)) {
       TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
-                      "UnidirectionalLstm input is only support UInt8 || Int8");
+                      "UnidirectionalLstm input does not support UInt8 || Int8");
       return false;
     }
     if (context->tensors[h_state_index].type !=
