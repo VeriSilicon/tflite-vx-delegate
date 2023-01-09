@@ -2699,7 +2699,7 @@ struct ReduceOpMapper : public OpMapperBase<TfLiteReducerParams> {
     auto op =
         delegate->GetGraph()->CreateOperation<T_OperationType>(axis, keep_dims);
 
-    (*op).BindInputs(inputs);
+    (*op).BindInput(inputs[0]);
     (*op).BindOutputs(outputs);
 
     delegate->GetOps().push_back(std::move(op));
