@@ -1212,6 +1212,9 @@ struct StridedSliceMapper : public OpMapperBase<TfLiteStridedSliceParams> {
     std::vector<int32_t> begin_dims(begin_tensor->GetShape()[0]);
     begin_tensor->CopyDataFromTensor(begin_dims.data());
     for (size_t i = 0; i < begin_dims.size(); i++) {
+      if(begin_dims[i] < 0) {
+        begin_dims[i] += input_tensor->GetShape()[i];
+      }
       if (begin_mask & (1 << i)) {
         begin_dims[i] = -1;
       }
@@ -1227,6 +1230,9 @@ struct StridedSliceMapper : public OpMapperBase<TfLiteStridedSliceParams> {
                                           });
     end_tensor->CopyDataFromTensor(end_dims.data());
     for (size_t i = 0; i < end_dims.size(); i++) {
+      if(end_dims[i] < 0) {
+        end_dims[i] += input_tensor->GetShape()[i];
+      }
       if (end_mask & (1 << i)) {
         end_dims[i] = end_pos;
       }
@@ -2643,7 +2649,7 @@ struct ReverseV2 : public OpMapperBase<TfLiteReverseSequenceParams> {
     std::vector<int> axis(axis_tensor->GetShape()[0]);
     axis_tensor->CopyDataFromTensor(axis.data());
     axis.data()[0] = vx::delegate::utils::ConvertAxis(
-        axis.data()[0], inputs[0]->GetShape().size() + 1);
+        axis.data()[0], inputs[0]->GetShape().size());
 
     auto op =
         delegate->GetGraph()->CreateOperation<tim::vx::ops::Reverse>(axis);
