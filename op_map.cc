@@ -3269,6 +3269,46 @@ struct ShapeMapper : public OpMapperBase<TfLiteShapeParams> {
   }
 };
 
+struct CastMapper : public OpMapperBase<EmptyStructPlaceholder> {
+  bool IsOpSupported(TfLiteContext* context,
+                     TfLiteNode* node,
+                     const TfLiteRegistration* registration) const override {
+    TfLiteTensor input_tensor = context->tensors[node->inputs->data[0]];
+    TfLiteTensor output_tensor = context->tensors[node->outputs->data[0]];
+    if (input_tensor.type == kTfLiteComplex64 || output_tensor.type == kTfLiteComplex64){
+      TFLITE_LOG_PROD(TFLITE_LOG_WARNING,
+          "Cast could not support Complex64 input/output.");
+      return false;
+    }
+    if (input_tensor.type == kTfLiteUInt32 || output_tensor.type == kTfLiteUInt32){
+      TFLITE_LOG_PROD(TFLITE_LOG_WARNING,
+          "Cast could not support UInt32 input/output.");
+      return false;
+    }
+    if (input_tensor.type == kTfLiteUInt16 || output_tensor.type == kTfLiteUInt16){
+      TFLITE_LOG_PROD(TFLITE_LOG_WARNING,
+          "Cast could not support UInt16 input/output.");
+      return false;
+    }
+    return true;
+  }
+
+  bool HandleMapOp (vx::delegate::Delegate* delegate,
+                   std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
+                   std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
+                   const void* params) override {
+  TFLITE_LOG(TFLITE_LOG_INFO, "Creating Cast op");
+  auto op = delegate->GetGraph()->CreateOperation<tim::vx::ops::Cast>();
+
+  (*op).BindInputs(inputs);
+  (*op).BindOutputs(outputs);
+
+  delegate->GetOps().push_back(std::move(op));
+
+  return true;
+  }
+};
+
 using createIOpMapItemFunc = std::function<std::unique_ptr<IOpMapper>()>;
 static const std::map<int, createIOpMapItemFunc> reg = {
 #define REGISTER_OP_MAPPER(TFLITE_OP_CODE, MAPPER_TYPE, ...)                  \
@@ -3425,6 +3465,7 @@ static const std::map<int, createIOpMapItemFunc> reg = {
     REGISTER_OP_MAPPER(kTfLiteBuiltinShape, ShapeMapper),
     REGISTER_OP_MAPPER(kTfLiteBuiltinEmbeddingLookup, EmbeddingLookup),
     REGISTER_OP_MAPPER(kTfLiteBuiltinHashtableLookup, HashtableLookup),
+    REGISTER_OP_MAPPER(kTfLiteBuiltinCast, CastMapper),
 
 #undef REGISTER_OP_MAPPER
 };
