@@ -3139,11 +3139,6 @@ struct ArgOpMapper : public OpMapperBase<EmptyStructPlaceholder> {
   bool IsOpSupported(TfLiteContext* context,
                      TfLiteNode* node,
                      const TfLiteRegistration* registration) const override {
-    if (context->tensors[node->inputs->data[0]].type == kTfLiteInt8 &&
-        context->tensors[node->outputs->data[0]].type == kTfLiteInt32) {
-      TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "I8 input/I32 output is not supported");
-      return false;
-    }
     if (0 == context->tensors[node->inputs->data[0]].dims->size ||
         0 == context->tensors[node->outputs->data[0]].dims->size) {
       TFLITE_LOG_PROD(TFLITE_LOG_WARNING, "Arg cannot support dynamic shape");
