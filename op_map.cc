@@ -1736,8 +1736,7 @@ struct BatchMatmul : public OpMapperBase<TfLiteBatchMatMulParams> {
                       "I32 outputs type is not supported in BatchMatmul");
       return false;
     }
-    if ((context->tensors[node->inputs->data[0]].type == kTfLiteInt8 ||
-         context->tensors[node->inputs->data[1]].type == kTfLiteInt8) ||
+    if (
         (context->tensors[node->inputs->data[1]].type == kTfLiteFloat32 &&
          context->tensors[node->inputs->data[0]].type == kTfLiteInt8)) {
       TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
@@ -1894,14 +1893,14 @@ struct BidirectionalSequenceRnn : public OpMapperBase<TfLiteBidirectionalSequenc
   constexpr static int kBwRecurrentWeightsTensor = 6;
   constexpr static int kBwBiasTensor = 7;
   constexpr static int kBwHiddenStateTensor = 8;
-  
+
   constexpr static int kAuxInputTensor = 9;       // Optional.
   constexpr static int kFwAuxWeightsTensor = 10;  // Optional.
   constexpr static int kBwAuxWeightsTensor = 11;  // Optional.
   // Output tensors.
   constexpr static int kFwOutputTensor = 0;
   constexpr static int kBwOutputTensor = 1;  // Only if merge_outputs is false.
- 
+
   bool IsOpSupported(TfLiteContext* context,
                              TfLiteNode* node,
                              const TfLiteRegistration* registration ) const{
@@ -1922,7 +1921,7 @@ struct BidirectionalSequenceRnn : public OpMapperBase<TfLiteBidirectionalSequenc
        return false;
     }
     return true;
-  } 
+  }
   bool HandleMapOp(vx::delegate::Delegate* delegate,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
@@ -1939,7 +1938,7 @@ struct BidirectionalSequenceRnn : public OpMapperBase<TfLiteBidirectionalSequenc
       break;
     case kTfLiteActRelu6:
       act = tim::vx::ops::BidirectionalSequenceRnn::kRELU6;
-      break; 
+      break;
     case kTfLiteActTanh:
       act = tim::vx::ops::BidirectionalSequenceRnn::kTANH;
       break;
@@ -1953,7 +1952,7 @@ struct BidirectionalSequenceRnn : public OpMapperBase<TfLiteBidirectionalSequenc
 
     auto op = delegate->GetGraph()->CreateOperation<tim::vx::ops::BidirectionalSequenceRnn>(act, time_major, merge_outputs);
     auto tensor_placeholder = delegate->GetGraph()->CreateTensorPlaceHolder();
-    
+
     std::vector<std::shared_ptr<tim::vx::Tensor>> input_tensors = {
       inputs[kInputTensor],
 
@@ -1962,7 +1961,7 @@ struct BidirectionalSequenceRnn : public OpMapperBase<TfLiteBidirectionalSequenc
       inputs[kFwBiasTensor],
       tensor_placeholder,
       inputs[kFwHiddenStateTensor],
-    
+
       inputs[kBwWeightsTensor],
       inputs[kBwRecurrentWeightsTensor],
       inputs[kBwBiasTensor],
@@ -1983,7 +1982,7 @@ struct BidirectionalSequenceRnn : public OpMapperBase<TfLiteBidirectionalSequenc
       input_tensors.push_back(inputs[kFwAuxWeightsTensor]);
       input_tensors.push_back(inputs[kBwAuxWeightsTensor]);
     }
-  
+
     (*op).BindInputs(input_tensors);
 
     (*op).BindOutputs(output_tensors);
@@ -2017,11 +2016,11 @@ struct UnidirectionalSequenceRnn : public OpMapperBase<TfLiteSequenceRNNParams>{
     }
     return true;
   }
-  
+
   bool HandleMapOp(vx::delegate::Delegate* delegate,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
-                   const void* params) override 
+                   const void* params) override
   {
     TFLITE_LOG(TFLITE_LOG_INFO, "Create UnidirectionalSequenceRnn op");
     const auto builtin = reinterpret_cast<const TfLiteSequenceRNNParams*>(params);
@@ -2064,7 +2063,7 @@ struct UnidirectionalSequenceRnn : public OpMapperBase<TfLiteSequenceRNNParams>{
     (*op).BindOutputs(output_tensor);
 
     delegate->GetOps().push_back(std::move(op));
-    
+
     return true;
   }
 };
@@ -2342,7 +2341,7 @@ struct BidirectionalSequenceLstm : public OpMapperBase<TfLiteBidirectionalSequen
   // Cell state tensors of size {n_batch, n_cell}
   constexpr static int kBwInputCellStateTensor = 38;
 
-  // Used as auxiliary input and weights 
+  // Used as auxiliary input and weights
   constexpr static int kAuxInputTensor = 39;  // Optional
   // Forward weights.
   constexpr static int kFwAuxInputToInputWeightsTensor = 40;   // Optional
@@ -2365,7 +2364,7 @@ struct BidirectionalSequenceLstm : public OpMapperBase<TfLiteBidirectionalSequen
     int i2i_index = node->inputs->data[kFwInputToInputWeightsTensor];
     int fwprojection_weights_index = node->inputs->data[kFwProjectionWeightsTensor];
     int fwaux_weight_index = node->inputs->data[kFwAuxInputToCellWeightsTensor];
-   
+
     if ( context->tensors[i2i_index].type != kTfLiteFloat32 ){
        TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
                       "Quantized weights are not supported");
@@ -2381,7 +2380,7 @@ struct BidirectionalSequenceLstm : public OpMapperBase<TfLiteBidirectionalSequen
                       "Aux weights are not supported");
        return false;
     }
-    
+
     return true;
   }
 
@@ -2419,12 +2418,12 @@ struct BidirectionalSequenceLstm : public OpMapperBase<TfLiteBidirectionalSequen
     auto op = delegate->GetGraph()->CreateOperation<tim::vx::ops::BidirectionalSequenceLstm>(
         cell_clip, proj_clip, act, forget_bias, time_major, recurrent_act_type, return_sequences);
     auto tensor_placeholder = delegate->GetGraph()->CreateTensorPlaceHolder();
-  
+
     std::vector<std::shared_ptr<tim::vx::Tensor>> input_tensors = {
       inputs[kInputTensor],
 
       // Forward LSTM cell tennsors
-      // Input weight tensors 
+      // Input weight tensors
       inputs[kFwInputToInputWeightsTensor],
       inputs[kFwInputToForgetWeightsTensor],
       inputs[kFwInputToCellWeightsTensor ],
@@ -2474,11 +2473,11 @@ struct BidirectionalSequenceLstm : public OpMapperBase<TfLiteBidirectionalSequen
       inputs[kBwForgetGateBiasTensor ],
       inputs[kBwCellGateBiasTensor ],
       inputs[kBwOutputGateBiasTensor ],
-     
+
       // Projection : optional
       inputs[kBwProjectionWeightsTensor ],
-      inputs[kBwProjectionBiasTensor ], 
-      
+      inputs[kBwProjectionBiasTensor ],
+
       // State Tensor
       inputs[kFwInputActivationStateTensor],
       inputs[kFwInputCellStateTensor],
@@ -2495,7 +2494,7 @@ struct BidirectionalSequenceLstm : public OpMapperBase<TfLiteBidirectionalSequen
       inputs[kBwAuxInputToForgetWeightsTensor],
       inputs[kBwAuxInputToCellWeightsTensor],
       inputs[kBwAuxInputToOutputWeightsTensor],
-     
+
      // LayerNorm :not used
       tensor_placeholder,
       tensor_placeholder,

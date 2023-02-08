@@ -11,3 +11,6 @@ pytest test_conv2d.py --external_delegate <full path to your libvx_delegate.so>
 pytest -k test_conv2d[True-1-1-224-224-3-3-1] test_conv2d.py --external_delegate <full path to your libvx_delegate.so>
 # - collect test case with --co
 ```
+
+# Options
+--save_test_model=<directory_to_save_test model in tflite format>
