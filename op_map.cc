@@ -1735,8 +1735,7 @@ struct BatchMatmul : public OpMapperBase<TfLiteBatchMatMulParams> {
                       "I32 outputs type is not supported in BatchMatmul");
       return false;
     }
-    if ((context->tensors[node->inputs->data[0]].type == kTfLiteInt8 ||
-         context->tensors[node->inputs->data[1]].type == kTfLiteInt8) ||
+    if (
         (context->tensors[node->inputs->data[1]].type == kTfLiteFloat32 &&
          context->tensors[node->inputs->data[0]].type == kTfLiteInt8)) {
       TFLITE_LOG_PROD(TFLITE_LOG_ERROR,

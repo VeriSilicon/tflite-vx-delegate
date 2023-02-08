@@ -7,7 +7,7 @@ class cpu:
     def __init__(self) -> None:
         # self.ext_delegate = tflite.load_delegate(vx_delegate_lib)
         pass
-    
+
     def run_with_rand_data(self, model):
         self.interpreter = tflite.Interpreter(model)
         self.input_details = self.interpreter.get_input_details()
@@ -16,7 +16,7 @@ class cpu:
         self.interpreter.allocate_tensors()
         in_data = []
         for input in self.input_details:
-            idx = input['index'] 
+            idx = input['index']
             shape = input['shape']
             np_dtype = input['dtype']
 
@@ -24,7 +24,7 @@ class cpu:
             # data = np.zeros(shape).astype(np_dtype)
             self.interpreter.set_tensor(idx, data)
             in_data.append(data)
-        
+
         self.interpreter.invoke()
 
         out = []
@@ -36,7 +36,7 @@ class cpu:
 class npu:
     def __init__(self, vx_delegate_lib) -> None:
         self.ext_delegate = tflite.load_delegate(vx_delegate_lib)
-    
+
     def run(self, model, input_list):
         self.interpreter = tflite.Interpreter(model, experimental_delegates= [self.ext_delegate])
         self.input_details = self.interpreter.get_input_details()
@@ -44,7 +44,7 @@ class npu:
 
         self.interpreter.allocate_tensors()
         len(self.input_details) == len(input_list)
-        
+
         # TODO order of input from CPU interpreter is aligned to NPU ??
         idx = 0
         for input in self.input_details:
