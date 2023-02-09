@@ -747,6 +747,7 @@ struct FullyConnectedMapper
         reinterpret_cast<const TfLiteFullyConnectedParams*>(params);
     auto input_tensor = inputs[0];
     auto weight_tensor = inputs[1];
+    uint32_t temp_batch = 1;
 
     if (input_tensor->GetShape().size() > 2 ||
         (input_tensor->GetShape().size() == 2 &&
@@ -756,10 +757,10 @@ struct FullyConnectedMapper
       for (int i = 0; i < input_tensor->GetShape().size(); i++) {
         total_input_size *= input_tensor->GetShape()[i];
       }
-      uint32_t input_batch = total_input_size / input_size;
+      temp_batch = total_input_size / input_size;
       auto reshape_output = delegate->GetGraph()->CreateTensor(
           input_tensor->GetSpec().AsTransientSpec());
-      std::vector<uint32_t> new_shape{input_size, input_batch};
+      std::vector<uint32_t> new_shape{input_size, temp_batch};
       auto reshape_op =
           delegate->GetGraph()->CreateOperation<tim::vx::ops::Reshape>(
               new_shape);
@@ -773,9 +774,31 @@ struct FullyConnectedMapper
         delegate->GetGraph()->CreateOperation<tim::vx::ops::FullyConnected>(
             0, weight_tensor->GetShape()[1]);
     (*op).BindInputs(inputs);
-    (*op).BindOutputs(outputs);
 
-    delegate->GetOps().push_back(std::move(op));
+    if (outputs[0]->GetShape().size() > 2) {
+      std::vector<uint32_t> real_output_shape = { weight_tensor->GetShape()[1],
+          temp_batch};
+      tim::vx::TensorSpec real_output_spec(inputs[0]->GetDataType(),
+                            real_output_shape, tim::vx::TensorAttribute::TRANSIENT);
+      auto real_output = delegate->GetGraph()->CreateTensor(real_output_spec);
+
+      (*op).BindOutput(real_output);
+
+      delegate->GetOps().push_back(std::move(op));
+
+      auto reshape_op =
+          delegate->GetGraph()->CreateOperation<tim::vx::ops::Reshape>(
+              outputs[0]->GetShape());
+
+      (*reshape_op).BindInput(real_output);
+      (*reshape_op).BindOutput(outputs[0]);
+      delegate->GetOps().push_back(reshape_op);  
+    }
+    else {
+      (*op).BindOutputs(outputs);
+
+       delegate->GetOps().push_back(std::move(op));
+    }
 
     return true;
   }
