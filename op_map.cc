@@ -292,7 +292,9 @@ struct OpMapperBase : public vx::op_map::IOpMapper {
       if (input_index < 0) {
         continue;
       }
-      if (context->tensors[input_index].type == kTfLiteInt64) {
+      if (context->tensors[input_index].type == kTfLiteInt64 &&
+          registration->builtin_code != 130) {
+        // op 130 (BroadcastTo) can be bypassed because the next op will do broadcast automatically.
         TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "Int64 input is not supported");
         return false;
       }
@@ -412,6 +414,13 @@ struct OpMapperBase : public vx::op_map::IOpMapper {
     bool broadcast_required = (inputs[0]->GetShape().size() != inputs[1]->GetShape().size());
     std::vector<std::shared_ptr<tim::vx::Tensor>> elementwise_inputs;
 
+    for (auto &t : inputs){
+      if(delegate->map_BroadcastTo.find(t) != delegate->map_BroadcastTo.end())
+        {
+          t = delegate->map_BroadcastTo[t];
+        }
+    }
+
     if (broadcast_required) {
       int base_shape_idx = inputs[0]->GetShape().size() >
                   inputs[1]->GetShape().size()? 0 : 1;
@@ -430,7 +439,6 @@ struct OpMapperBase : public vx::op_map::IOpMapper {
     }
     return inputs;
   }
-
 };
 
 }  // namespace
@@ -3270,6 +3278,18 @@ struct CastMapper : public OpMapperBase<EmptyStructPlaceholder> {
   }
 };
 
+struct BroadcastToMapper : public OpMapperBase<EmptyStructPlaceholder> {
+  bool HandleMapOp (vx::delegate::Delegate* delegate,
+                   std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
+                   std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
+                   const void* params) override {
+    TFLITE_LOG(TFLITE_LOG_INFO, "Create BroadcastTo op");
+
+    delegate->map_BroadcastTo [outputs[0]] = inputs[0];
+    return true;
+  }
+};
+
 using createIOpMapItemFunc = std::function<std::unique_ptr<IOpMapper>()>;
 static const std::map<int, createIOpMapItemFunc> reg = {
 #define REGISTER_OP_MAPPER(TFLITE_OP_CODE, MAPPER_TYPE, ...)                  \
@@ -3427,6 +3447,7 @@ static const std::map<int, createIOpMapItemFunc> reg = {
     REGISTER_OP_MAPPER(kTfLiteBuiltinEmbeddingLookup, EmbeddingLookup),
     REGISTER_OP_MAPPER(kTfLiteBuiltinHashtableLookup, HashtableLookup),
     REGISTER_OP_MAPPER(kTfLiteBuiltinCast, CastMapper),
+    REGISTER_OP_MAPPER(kTfLiteBuiltinBroadcastTo, BroadcastToMapper),
 
 #undef REGISTER_OP_MAPPER
 };

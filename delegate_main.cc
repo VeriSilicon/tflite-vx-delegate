@@ -152,7 +152,7 @@ tim::vx::DataType TfLiteDtypeToVsiDtype(TfLiteType type) {
     case kTfLiteFloat16:
       return tim::vx::DataType::FLOAT16;
     default:
-      TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "Unsuppoted type: %d", type);
+      TFLITE_LOG_PROD(TFLITE_LOG_WARNING, "Unsuppoted datatype: %d, will be ignored.", type);
       break;
   }
 
