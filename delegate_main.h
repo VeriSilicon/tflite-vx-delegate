@@ -120,6 +120,8 @@ class Delegate {
     return tensors_;
   }
 
+  std::map<std::shared_ptr<tim::vx::Tensor>,std::shared_ptr<tim::vx::Tensor>> map_BroadcastTo;
+
  private:
   struct OperationDataType {
     int builtin_code;
