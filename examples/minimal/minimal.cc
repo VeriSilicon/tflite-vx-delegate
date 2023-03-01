@@ -96,6 +96,12 @@ void setupInput(int argc,
         memcpy(interpreter->typed_input_tensor<int8_t>(input_idx), in.data(), in.size());
         break;
       }
+      case kTfLiteInt32:
+      {
+        auto in = ReadData(argv[2], input_data, input_idx, in_tensor->bytes);
+        memcpy(interpreter->typed_input_tensor<int32_t>(input_idx), in.data(), in.size());
+        break;
+      }
       default: {
         std::cout << "Fatal: datatype for input not implemented" << std::endl;
         TFLITE_EXAMPLE_CHECK(false);
@@ -243,6 +249,13 @@ int main(int argc, char* argv[]) {
       case kTfLiteFloat32: {
         auto npu_out_buf = npu_interpreter->typed_output_tensor<float_t>(idx);
         auto cpu_out_buf = cpu_interpreter->typed_output_tensor<float_t>(idx);
+
+        CompareTensorResult(idx, npu_out_buf, cpu_out_buf, bytes);
+        break;
+      }
+       case kTfLiteInt32: {
+        auto npu_out_buf = npu_interpreter->typed_output_tensor<int32_t>(idx);
+        auto cpu_out_buf = cpu_interpreter->typed_output_tensor<int32_t>(idx);
 
         CompareTensorResult(idx, npu_out_buf, cpu_out_buf, bytes);
         break;

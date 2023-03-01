@@ -85,7 +85,7 @@ void CompareTensorResult(size_t idx,
     for (auto j = 0; j < bytes; ++j) {
       int count = 0;
       if (std::abs(npu_out_buf[j] - cpu_out_buf[j]) > 2 && count < 100) {
-        std::cout << "[Result mismatch]: Output[" << idx << "], CPU vs NPU("
+        std::cout << "[Result mismatch]: Output[" << idx <<","<<j <<"], CPU vs NPU("
                   << static_cast<int32_t>(cpu_out_buf[j]) << ","
                   << static_cast<int32_t>(npu_out_buf[j]) << ")" << std::endl;
 
@@ -96,7 +96,7 @@ void CompareTensorResult(size_t idx,
     for (auto j = 0; j < bytes; ++j) {
       int count = 0;
       if (std::abs(npu_out_buf[j] - cpu_out_buf[j]) > 2 && count < 100) {
-        std::cout << "[Result mismatch]: Output[" << idx << "], CPU vs NPU("
+        std::cout << "[Result mismatch]: Output[" << idx <<","<<j <<"], CPU vs NPU("
                   << static_cast<int32_t>(cpu_out_buf[j]) << ","
                   << static_cast<int32_t>(npu_out_buf[j]) << ")" << std::endl;
 
@@ -107,9 +107,19 @@ void CompareTensorResult(size_t idx,
       for (auto j = 0; j < bytes / sizeof(float_t); ++j) {
         if (std::abs(npu_out_buf[j] - cpu_out_buf[j]) >
             0.001f) {  // TODO{sven}: not accurate
-          std::cout << "[Result mismatch]: Output[" << idx << "], CPU vx NPU("
+          std::cout << "[Result mismatch]: Output[" << idx <<","<<j <<"], CPU vs NPU("
                     << cpu_out_buf[j] << "," << npu_out_buf[j] << ")"
                     << std::endl;
+        }
+      }
+  } else if (typeid(T) == typeid(int32_t)) {
+      for (auto j = 0; j < bytes / sizeof(int32_t); ++j) {
+        int count = 0;
+        if (std::abs(npu_out_buf[j] - cpu_out_buf[j]) > 2 && count < 100) {
+          std::cout << "[Result mismatch]: Output[" << idx <<","<<j <<"], CPU vs NPU("
+                    << cpu_out_buf[j] << "," << npu_out_buf[j] << ")"
+                    << std::endl;
+          count++;
         }
       }
     }
