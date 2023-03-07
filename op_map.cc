@@ -392,10 +392,10 @@ struct OpMapperBase : public vx::op_map::IOpMapper {
     return false;
   }
 
-  std::vector<int32_t> ExtendBroadcast(const std::shared_ptr<tim::vx::Tensor>& base_shape_tensor,
+  std::vector<uint32_t> ExtendBroadcast(const std::shared_ptr<tim::vx::Tensor>& base_shape_tensor,
                   const std::shared_ptr<tim::vx::Tensor>& required_broadcast_tensor){
      std::vector<uint32_t> shape (base_shape_tensor->GetShape().size());
-     std::vector<int32_t> broadcast_param;
+     std::vector<uint32_t> broadcast_param;
      for(int i = 0; i < base_shape_tensor->GetShape().size();i++){
       shape[i] = i < required_broadcast_tensor->GetShape().size() ?
                  required_broadcast_tensor->GetShape()[i] : 1;
@@ -415,17 +415,25 @@ struct OpMapperBase : public vx::op_map::IOpMapper {
     if (broadcast_required) {
       int base_shape_idx = inputs[0]->GetShape().size() >
                   inputs[1]->GetShape().size()? 0 : 1;
-      std::vector<int32_t> broadcast_param;
+      std::vector<uint32_t> broadcast_param;
       broadcast_param = ExtendBroadcast(inputs[base_shape_idx], inputs[1-base_shape_idx]);
       tim::vx::TensorSpec broadcast_spec (inputs[1-base_shape_idx]->GetSpec().AsTransientSpec());
 
       auto broadcast_out = delegate->GetGraph()->CreateTensor(broadcast_spec);
       auto op_broadcast =
-            delegate->GetGraph()->CreateOperation<tim::vx::ops::Broadcast>(
+            delegate->GetGraph()->CreateOperation<tim::vx::ops::Reshape>(
                 broadcast_param);
-        (*op_broadcast).BindInput(inputs[1-base_shape_idx]).BindOutput(broadcast_out);
+      (*op_broadcast).BindInput(inputs[1-base_shape_idx]).BindOutput(broadcast_out);
+
+      if (base_shape_idx == 0) {
         elementwise_inputs.push_back(inputs[base_shape_idx]);
         elementwise_inputs.push_back(broadcast_out);
+      }
+      else{
+        elementwise_inputs.push_back(broadcast_out);
+        elementwise_inputs.push_back(inputs[base_shape_idx]);
+      }
+
       return elementwise_inputs;
     }
     return inputs;
