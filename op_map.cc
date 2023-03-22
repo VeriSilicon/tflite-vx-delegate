@@ -1338,6 +1338,74 @@ struct PadMapper : public OpMapperBase<EmptyStructPlaceholder> {
   }
 };
 
+struct MirrorPadMapper : public OpMapperBase<EmptyStructPlaceholder> {
+  virtual bool IsOpSupported(TfLiteContext* context,
+                             TfLiteNode* node,
+                             const TfLiteRegistration* registration) const {
+
+    if(0 == context->tensors[node->outputs->data[0]].dims->size){
+      TFLITE_LOG_PROD(TFLITE_LOG_WARNING, "MirrorPad cannot support dynamic shape");
+      return false;
+    }
+    const auto builtin =
+        reinterpret_cast<const TfLiteMirrorPaddingParams*>(node->builtin_data);
+    if(builtin->mode == kTfLiteMirrorPaddingUnknown){
+      TFLITE_LOG_PROD(TFLITE_LOG_WARNING, "MirrorPad mode should have certain value");
+      return false;
+    }
+
+    return true;
+  }
+  bool HandleMapOp(vx::delegate::Delegate* delegate,
+                   std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
+                   std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
+                   const void* params) override {
+    TFLITE_LOG(TFLITE_LOG_INFO, "Creating Mirror Pad op");
+    auto padding = inputs[1];
+    std::vector<uint32_t> padding_shape = padding->GetShape();
+    uint32_t pad = 1;
+    for (auto s : padding_shape) {
+      pad *= s;
+    }
+    std::vector<uint32_t> pad_size(pad);
+    padding->CopyDataFromTensor(pad_size.data());
+    std::vector<uint32_t> front_size;
+    std::vector<uint32_t> back_size;
+    for (int i = pad_size.size() - 1; i >= 0; i -= 2) {
+      back_size.push_back(pad_size[i]);
+      front_size.push_back(pad_size[i - 1]);
+    }
+    int32_t val = 0;
+    if (inputs.size() > 2) {
+      auto pad_value = inputs[2];
+      if (!pad_value->IsPlaceHolder()) {
+        pad_value->CopyDataFromTensor(&val);
+      }
+    }
+
+    const auto builtin =
+        reinterpret_cast<const TfLiteMirrorPaddingParams*>(params);
+    tim::vx::ops::Pad::pad_mode_type mode = tim::vx::ops::Pad::PAD_MODE_CONSTANT;
+    switch (builtin->mode) {
+      case kTfLiteMirrorPaddingReflect:
+        mode=tim::vx::ops::Pad::PAD_MODE_REFLECT;
+        break;
+      case kTfLiteMirrorPaddingSymmetric:
+        mode = tim::vx::ops::Pad::PAD_MODE_SYMMETRIC;
+      default:
+        break;
+    }
+
+    auto op = delegate->GetGraph()->CreateOperation<tim::vx::ops::Pad>(
+        front_size, back_size, val, mode);
+    (*op).BindInput(inputs[0]).BindOutputs(outputs);
+
+    delegate->GetOps().push_back(std::move(op));
+
+    return true;
+  }
+};
+
 using AddMapper =
     SimpleOpWithFusedActivationMapper<tim::vx::ops::Add, TfLiteAddParams>;
 using SubMapper =
@@ -3290,6 +3358,82 @@ struct BroadcastToMapper : public OpMapperBase<EmptyStructPlaceholder> {
   }
 };
 
+struct SquareDifferenceMapper : public OpMapperBase<EmptyStructPlaceholder> {
+  bool IsOpSupported(TfLiteContext* context,
+                     TfLiteNode* node,
+                     const TfLiteRegistration* registration) const {
+    TfLiteTensor input_tensor0 = context->tensors[node->inputs->data[0]];
+    TfLiteTensor input_tensor1 = context->tensors[node->inputs->data[1]];
+    TfLiteTensor output_tensor = context->tensors[node->outputs->data[0]];
+
+    if (input_tensor0.type != input_tensor1.type) return false;
+
+    if (input_tensor0.type == kTfLiteFloat32 &&
+        output_tensor.type == kTfLiteFloat32)
+      return true;
+
+    if (((input_tensor0.type == kTfLiteInt8 &&
+          output_tensor.type == kTfLiteInt8) ||
+         (input_tensor0.type == kTfLiteUInt8 &&
+          output_tensor.type == kTfLiteUInt8)) &&
+        (reinterpret_cast<const TfLiteAffineQuantization*>(input_tensor0.quantization.params)->scale->size == 1 &&
+         reinterpret_cast<const TfLiteAffineQuantization*>(output_tensor.quantization.params)->scale->size == 1))
+      return true;
+
+    return false;
+  }
+
+  bool HandleMapOp (vx::delegate::Delegate* delegate,
+                   std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
+                   std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
+                   const void* params) override {
+  TFLITE_LOG(TFLITE_LOG_INFO, "Creating SquareDifferenceMapper op");
+  tim::vx::DataType input_datatype = inputs[0]->GetSpec().datatype_;
+  tim::vx::TensorSpec output_spec = outputs[0]->GetSpec();
+
+  tim::vx::TensorSpec temp_tensor1_spec(tim::vx::DataType::UNKNOWN, {1},
+                                 tim::vx::TensorAttribute::CONSTANT,output_spec.quantization_);
+  std::shared_ptr<tim::vx::Tensor> temp_tensor0 = delegate->GetGraph()->CreateTensor(output_spec);
+
+  size_t temp_tensor1_size = 0;
+  std::vector<uint8_t> temp_tensor1_data(4);
+  switch (input_datatype) {
+       case tim::vx::DataType::UINT8:
+       case tim::vx::DataType::INT8: {
+        std::vector<float> temp_tensor1_scalar = {1.0};
+        std::vector<int32_t> temp_tensor1_zp = {0};
+        temp_tensor1_data[0] = 2;
+        temp_tensor1_spec.quantization_.SetScales(temp_tensor1_scalar);
+        temp_tensor1_spec.quantization_.SetZeroPoints(temp_tensor1_zp);
+        temp_tensor1_spec.datatype_ = tim::vx::DataType::UINT8;
+        break;
+       }
+       case tim::vx::DataType::FLOAT32: {
+        std::vector<float> float_data = {2.0f};
+        memcpy(temp_tensor1_data.data(), float_data.data(), sizeof(float));
+        temp_tensor1_spec.datatype_ = tim::vx::DataType::FLOAT32;
+        break;
+       }
+       default:
+        TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "Unsuppoted SquareDifference type");
+        break;
+  }
+  auto temp_tensor1 = delegate->GetGraph()->CreateTensor(temp_tensor1_spec,temp_tensor1_data.data());
+
+  auto sub_op = delegate->GetGraph()->CreateOperation<tim::vx::ops::Sub>();
+  (*sub_op).BindInputs(inputs);
+  (*sub_op).BindOutput(temp_tensor0);
+  auto pow_op = delegate->GetGraph()->CreateOperation<tim::vx::ops::Pow>();
+
+  (*pow_op).BindInputs({temp_tensor0,temp_tensor1});
+  (*pow_op).BindOutputs(outputs);
+
+  delegate->GetOps().push_back(std::move(sub_op));
+  delegate->GetOps().push_back(std::move(pow_op));
+  return true;
+  }
+};
+
 using createIOpMapItemFunc = std::function<std::unique_ptr<IOpMapper>()>;
 static const std::map<int, createIOpMapItemFunc> reg = {
 #define REGISTER_OP_MAPPER(TFLITE_OP_CODE, MAPPER_TYPE, ...)                  \
@@ -3318,6 +3462,7 @@ static const std::map<int, createIOpMapItemFunc> reg = {
     REGISTER_OP_MAPPER(kTfLiteBuiltinReshape, ReshapeMapper),
     REGISTER_OP_MAPPER(kTfLiteBuiltinStridedSlice, StridedSliceMapper),
     REGISTER_OP_MAPPER(kTfLiteBuiltinPad, PadMapper),
+    REGISTER_OP_MAPPER(kTfLiteBuiltinMirrorPad, MirrorPadMapper),
     REGISTER_OP_MAPPER(kTfLiteBuiltinExpandDims, ExpandDimsMapper),
     REGISTER_OP_MAPPER(kTfLiteBuiltinOneHot, OneHotMapper),
     REGISTER_OP_MAPPER(
@@ -3448,6 +3593,7 @@ static const std::map<int, createIOpMapItemFunc> reg = {
     REGISTER_OP_MAPPER(kTfLiteBuiltinHashtableLookup, HashtableLookup),
     REGISTER_OP_MAPPER(kTfLiteBuiltinCast, CastMapper),
     REGISTER_OP_MAPPER(kTfLiteBuiltinBroadcastTo, BroadcastToMapper),
+    REGISTER_OP_MAPPER(kTfLiteBuiltinSquaredDifference, SquareDifferenceMapper),
 
 #undef REGISTER_OP_MAPPER
 };
