@@ -52,6 +52,12 @@ float cosine(const std::vector<T>& lhs, const std::vector<T>& rhs) {
     return lhs_m;
   };
 
+  if (lhs.size() == 1 ){ // Two values are both scalar, just compare similarity instead of cosinesimilarity
+    float ans = 0.f;
+    ans = (float)lhs[0]/(float)rhs[0] > 1? (float)rhs[0]/(float)lhs[0]  :(float)lhs[0]/(float)rhs[0] ;
+    return ans;
+  }
+
   auto lhs_m = calc_m(lhs);
   auto rhs_m = calc_m(rhs);
 
@@ -81,9 +87,9 @@ void CompareTensorResult(size_t idx,
                          T* npu_out_buf,
                          T* cpu_out_buf,
                          uint32_t bytes) {
+  int count = 0;
   if (typeid(T) == typeid(int8_t)) {
     for (auto j = 0; j < bytes; ++j) {
-      int count = 0;
       if (std::abs(npu_out_buf[j] - cpu_out_buf[j]) > 2 && count < 100) {
         std::cout << "[Result mismatch]: Output[" << idx <<","<<j <<"], CPU vs NPU("
                   << static_cast<int32_t>(cpu_out_buf[j]) << ","
@@ -91,10 +97,10 @@ void CompareTensorResult(size_t idx,
 
         count++;
       }
+      else if(count == 100) break;
     }
   } else if (typeid(T) == typeid(uint8_t)) {
     for (auto j = 0; j < bytes; ++j) {
-      int count = 0;
       if (std::abs(npu_out_buf[j] - cpu_out_buf[j]) > 2 && count < 100) {
         std::cout << "[Result mismatch]: Output[" << idx <<","<<j <<"], CPU vs NPU("
                   << static_cast<int32_t>(cpu_out_buf[j]) << ","
@@ -102,25 +108,27 @@ void CompareTensorResult(size_t idx,
 
         count++;
       }
+      else if(count == 100) break;
     }
   } else if (typeid(T) == typeid(float_t)) {
       for (auto j = 0; j < bytes / sizeof(float_t); ++j) {
-        if (std::abs(npu_out_buf[j] - cpu_out_buf[j]) >
-            0.001f) {  // TODO{sven}: not accurate
+        if (std::abs(npu_out_buf[j] - cpu_out_buf[j]) > 0.001f && count < 100) {  // TODO{sven}: not accurate
           std::cout << "[Result mismatch]: Output[" << idx <<","<<j <<"], CPU vs NPU("
                     << cpu_out_buf[j] << "," << npu_out_buf[j] << ")"
                     << std::endl;
+          count++;
         }
+        else if(count == 100) break;
       }
   } else if (typeid(T) == typeid(int32_t)) {
       for (auto j = 0; j < bytes / sizeof(int32_t); ++j) {
-        int count = 0;
         if (std::abs(npu_out_buf[j] - cpu_out_buf[j]) > 2 && count < 100) {
           std::cout << "[Result mismatch]: Output[" << idx <<","<<j <<"], CPU vs NPU("
                     << cpu_out_buf[j] << "," << npu_out_buf[j] << ")"
                     << std::endl;
           count++;
         }
+        else if(count == 100) break;
       }
     }
   else {
@@ -133,7 +141,7 @@ void CompareTensorResult(size_t idx,
   memcpy(lhs.data(), cpu_out_buf, bytes);
   memcpy(rhs.data(), npu_out_buf, bytes);
 
-  std::cout << "CosineCosineSimilarity = " << cosine(lhs, rhs) << std::endl;
+  std::cout << "The "<<idx<<" output CosineCosineSimilarity = " << cosine(lhs, rhs) << std::endl;
 };
 
 #endif /* VX_DELEGATE_EXAMPLE_UTIL_H_ */
