@@ -1190,7 +1190,7 @@ struct StridedSliceMapper : public OpMapperBase<TfLiteStridedSliceParams> {
     begin_tensor->CopyDataFromTensor(begin_dims.data());
     for (size_t i = 0; i < begin_dims.size(); i++) {
       if(begin_dims[i] < 0) {
-        begin_dims[i] += input_tensor->GetShape()[i];
+        begin_dims[i] += input_tensor->GetShape()[begin_dims.size()-1-i];
       }
       if (begin_mask & (1 << i)) {
         begin_dims[i] = -1;
@@ -1208,7 +1208,7 @@ struct StridedSliceMapper : public OpMapperBase<TfLiteStridedSliceParams> {
     end_tensor->CopyDataFromTensor(end_dims.data());
     for (size_t i = 0; i < end_dims.size(); i++) {
       if(end_dims[i] < 0) {
-        end_dims[i] += input_tensor->GetShape()[i];
+        end_dims[i] += input_tensor->GetShape()[end_dims.size()-1-i];
       }
       if (end_mask & (1 << i)) {
         end_dims[i] = end_pos;
