@@ -433,8 +433,16 @@ struct OpMapperBase : public vx::op_map::IOpMapper {
             delegate->GetGraph()->CreateOperation<tim::vx::ops::Broadcast>(
                 broadcast_param);
         (*op_broadcast).BindInput(inputs[1-base_shape_idx]).BindOutput(broadcast_out);
-        elementwise_inputs.push_back(inputs[base_shape_idx]);
-        elementwise_inputs.push_back(broadcast_out);
+
+        if(base_shape_idx == 0){
+          elementwise_inputs.push_back(inputs[base_shape_idx]);
+          elementwise_inputs.push_back(broadcast_out);
+        }
+        else{
+          elementwise_inputs.push_back(broadcast_out);
+          elementwise_inputs.push_back(inputs[base_shape_idx]);
+        }
+
       return elementwise_inputs;
     }
     return inputs;
