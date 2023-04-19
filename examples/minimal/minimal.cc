@@ -231,6 +231,10 @@ int main(int argc, char* argv[]) {
     TFLITE_EXAMPLE_CHECK(npu_interpreter->output_tensor(idx)->bytes ==
                          cpu_interpreter->output_tensor(idx)->bytes);
     auto bytes = npu_interpreter->output_tensor(idx)->bytes;
+    auto tensor_location = output_idx_list[idx];
+    auto tensor_name = npu_interpreter->GetOutputName(idx);
+    std::cout<<"Checking "<<idx <<" output. In tflite model, the location is "<<tensor_location<< ", tensor name is: "
+             <<tensor_name<<std::endl;
     switch (npu_interpreter->output_tensor(idx)->type) {
       case kTfLiteInt8: {
         auto npu_out_buf = npu_interpreter->typed_output_tensor<int8_t>(idx);
