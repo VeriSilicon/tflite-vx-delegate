@@ -3446,6 +3446,38 @@ struct SquareDifferenceMapper : public OpMapperBase<EmptyStructPlaceholder> {
   }
 };
 
+struct ScatterNDMapper : public OpMapperBase<EmptyStructPlaceholder> {
+  bool IsOpSupported(TfLiteContext* context,
+                     TfLiteNode* node,
+                     const TfLiteRegistration* registration) const override{
+    auto shape_tensor=context->tensors[node->inputs->data[2]];
+    if (shape_tensor.allocation_type != kTfLiteMmapRo) {
+      TFLITE_LOG_PROD(TFLITE_LOG_WARNING,
+                     "ScatterNd only support parameter tensor as const input.");
+      return false;
+    }
+    return true;
+  }
+  bool HandleMapOp (vx::delegate::Delegate* delegate,
+                   std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
+                   std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
+                   const void* params) override {
+    TFLITE_LOG(TFLITE_LOG_INFO, "Create ScatterND op");
+    auto shape_tensor =  inputs[2];
+    std::vector<uint32_t> shape(shape_tensor->GetShape()[0]);
+    shape_tensor->CopyDataFromTensor(shape.data());
+    std::reverse(shape.begin(), shape.end());
+
+    auto op = delegate->GetGraph()->CreateOperation<tim::vx::ops::ScatterND>(shape);
+
+    (*op).BindInput(inputs[0]).BindInput(inputs[1]);
+    (*op).BindOutputs(outputs);
+    delegate->GetOps().push_back(std::move(op));
+
+    return true;
+  }
+};
+
 using createIOpMapItemFunc = std::function<std::unique_ptr<IOpMapper>()>;
 static const std::map<int, createIOpMapItemFunc> reg = {
 #define REGISTER_OP_MAPPER(TFLITE_OP_CODE, MAPPER_TYPE, ...)                  \
@@ -3608,6 +3640,7 @@ static const std::map<int, createIOpMapItemFunc> reg = {
     REGISTER_OP_MAPPER(kTfLiteBuiltinCast, CastMapper),
     REGISTER_OP_MAPPER(kTfLiteBuiltinBroadcastTo, BroadcastToMapper),
     REGISTER_OP_MAPPER(kTfLiteBuiltinSquaredDifference, SquareDifferenceMapper),
+    REGISTER_OP_MAPPER(kTfLiteBuiltinScatterNd,ScatterNDMapper)
 
 #undef REGISTER_OP_MAPPER
 };
