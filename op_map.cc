@@ -1350,7 +1350,7 @@ struct PadMapper : public OpMapperBase<EmptyStructPlaceholder> {
   }
 };
 
-struct MirrorPadMapper : public OpMapperBase<EmptyStructPlaceholder> {
+struct MirrorPadMapper : public OpMapperBase<TfLiteMirrorPaddingParams> {
   virtual bool IsOpSupported(TfLiteContext* context,
                              TfLiteNode* node,
                              const TfLiteRegistration* registration) const {
