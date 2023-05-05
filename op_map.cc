@@ -3536,6 +3536,8 @@ static const std::map<int, createIOpMapItemFunc> reg = {
     REGISTER_OP_MAPPER(kTfLiteBuiltinDepthToSpace, Depth2SpaceMapper),
     REGISTER_OP_MAPPER(kTfLiteBuiltinPrelu, PreluMapper),
     REGISTER_OP_MAPPER(
+        kTfLiteBuiltinGelu, SimpleOpMapper<tim::vx::ops::Gelu>, "Gelu"),
+    REGISTER_OP_MAPPER(
         kTfLiteBuiltinElu, SimpleOpMapper<tim::vx::ops::Elu>, "Elu"),
     REGISTER_OP_MAPPER(
         kTfLiteBuiltinRelu, SimpleOpMapper<tim::vx::ops::Relu>, "Relu"),
