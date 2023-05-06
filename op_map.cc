@@ -117,8 +117,9 @@ std::shared_ptr<tim::vx::Tensor> ReverseInputTensor(
     vx::delegate::Delegate* delegate,
     const std::shared_ptr<tim::vx::Tensor>& original_tensor,
     std::vector<int32_t> axis) {
-  auto reversed_tensor =
-      delegate->GetGraph()->CreateTensor(original_tensor->GetSpec());
+  auto spec = original_tensor->GetSpec();
+  spec.SetAttribute(tim::vx::TensorAttribute::TRANSIENT);
+  auto reversed_tensor = delegate->GetGraph()->CreateTensor(spec);
   std::shared_ptr<tim::vx::Operation> op =
       delegate->GetGraph()->CreateOperation<tim::vx::ops::Reverse>(axis);
   (*op).BindInput(original_tensor);
