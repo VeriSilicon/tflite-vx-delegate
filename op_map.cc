@@ -44,11 +44,23 @@
 #include "utils.h"
 #include "vsi_npu_custom_op.h"
 #include "delegate_main.h"
+#include "tim/vx/graph.h"
 
 using namespace tflite;
 using namespace tflite::ops::builtin;
 
 namespace {
+
+template <typename T>
+bool CompareToMax(T* data, T max, int64_t bytes) {
+    int size = sizeof(T);
+    for (int i = 0; i< bytes/size;i++){
+      if(data[i] != max){
+        return true;
+      }
+    }
+    return false;
+}
 
 inline tim::vx::PadType TflitePadTypeToVsiPadType(TfLitePadding pad) {
   switch (pad) {
@@ -653,8 +665,85 @@ struct SimpleOpWithBroadcastNoActivationMapper
 
 using MaximumMapper =
     SimpleOpWithBroadcastNoActivationMapper<tim::vx::ops::Maximum>;
-using MinimumMapper =
-    SimpleOpWithBroadcastNoActivationMapper<tim::vx::ops::Minimum>;
+
+struct MinimumMapper : public OpMapperBase<tim::vx::ops::Minimum> {
+  bool HandleMapOp(vx::delegate::Delegate* delegate,
+                   std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
+                   std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
+                   const void* params) override {
+    TFLITE_LOG(TFLITE_LOG_INFO, "Creating Minimum op");
+
+    if (inputs[1]->GetSpec().attr_ == tim::vx::TensorAttribute::CONSTANT &&
+        inputs[1]->GetQuantization() == inputs[0]->GetQuantization()) {
+      int64_t bytes = inputs[1]->GetSpec().GetByteSize();
+      void* data_ptr = malloc(bytes);
+      bool NeedBind = false;
+      inputs[1]->CopyDataFromTensor(data_ptr);
+      // bool NeedBind = false;
+      switch (inputs[1]->GetDataType()) {
+        case tim::vx::DataType::INT8: {
+          int8_t* int8_data = (int8_t*)data_ptr;
+          int8_t i8max = std::numeric_limits<int8_t>::max();
+          NeedBind = CompareToMax(int8_data, i8max, bytes);
+        } break;
+        case tim::vx::DataType::UINT8: {
+          uint8_t* uint8_data = (uint8_t*)data_ptr;
+          uint8_t u8max = std::numeric_limits<uint8_t>::max();
+          NeedBind = CompareToMax(uint8_data, u8max, bytes);
+        } break;
+        case tim::vx::DataType::INT16: {
+          int16_t* int16_data = (int16_t*)data_ptr;
+          int16_t i16max = std::numeric_limits<int16_t>::max();
+          NeedBind = CompareToMax(int16_data, i16max, bytes);
+        } break;
+        case tim::vx::DataType::UINT16: {
+          uint16_t* uint16_data = (uint16_t*)data_ptr;
+          uint16_t u16max = std::numeric_limits<uint16_t>::max();
+          NeedBind = CompareToMax(uint16_data, u16max, bytes);
+        } break;
+        case tim::vx::DataType::INT32: {
+          int32_t* int32_data = (int32_t*)data_ptr;
+          int32_t i32max = std::numeric_limits<int32_t>::max();
+          NeedBind = CompareToMax(int32_data, i32max, bytes);
+        } break;
+        case tim::vx::DataType::UINT32: {
+          uint32_t* uint32_data = (uint32_t*)data_ptr;
+          uint32_t u32max = std::numeric_limits<uint32_t>::max();
+          NeedBind = CompareToMax(uint32_data, u32max, bytes);
+        } break;
+        case tim::vx::DataType::FLOAT16:
+        case tim::vx::DataType::FLOAT32:
+        default:
+          NeedBind = true;
+          break;
+      }
+
+      if (!NeedBind) {
+        std::map<int32_t, std::shared_ptr<tim::vx::Tensor>>::iterator it =
+            delegate->GetTensors().begin();
+        int32_t tensor_index = -1;
+        for (it; it != delegate->GetTensors().end(); it++) {
+          if (it->second == outputs[0]) {
+            tensor_index = it->first;
+            break;
+          }
+        }
+        delegate->GetTensors()[tensor_index] =
+            inputs[0];  // update tensormap to bypass operation
+        return true;
+      }
+    }  // handle constant second input
+
+    auto broadcasted_inputs =
+        this->HandleNeedBroadcastOp(delegate, inputs, outputs, params);
+    auto op = delegate->GetGraph()->CreateOperation<tim::vx::ops::Minimum>();
+    (*op).BindInputs(broadcasted_inputs);  // Bind if second input is not
+                                           // constant or not suitable to bypass
+    (*op).BindOutputs(outputs);
+    delegate->GetOps().push_back(std::move(op));
+    return true;
+  }  // handle map op
+};
 
 template <typename T_Param>
 struct Conv2dKind
@@ -3551,7 +3640,7 @@ static const std::map<int, createIOpMapItemFunc> reg = {
     REGISTER_OP_MAPPER(kTfLiteBuiltinHardSwish,
                        SimpleOpMapper<tim::vx::ops::HardSwish>,
                        "HardSwish"),
-    REGISTER_OP_MAPPER(kTfLiteBuiltinMinimum, MinimumMapper,"Minimum"),
+    REGISTER_OP_MAPPER(kTfLiteBuiltinMinimum, MinimumMapper),
     REGISTER_OP_MAPPER(kTfLiteBuiltinMaximum, MaximumMapper,"Maximum"),
     REGISTER_OP_MAPPER(kTfLiteBuiltinAdd, AddMapper, "Add"),
     REGISTER_OP_MAPPER(kTfLiteBuiltinSub, SubMapper, "Sub"),
