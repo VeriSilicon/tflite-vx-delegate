@@ -115,11 +115,13 @@ class Delegate {
 
   std::vector<std::shared_ptr<tim::vx::Operation>>& GetOps() { return ops_; }
   int GetOperationOutput(uint32_t index) { return op_info_.outputs[index]; }
+  int GetGraphOutput(uint32_t index) { return subgraph_outputs_[index]; }
   std::shared_ptr<tim::vx::Graph>& GetGraph() { return graph_; }
   std::map<int32_t, std::shared_ptr<tim::vx::Tensor>>& GetTensors() {
     return tensors_;
   }
 
+  std::shared_ptr<tim::vx::Operation> postproc_;
   std::map<std::shared_ptr<tim::vx::Tensor>,std::shared_ptr<tim::vx::Tensor>> map_BroadcastTo;
 
  private:
@@ -153,6 +155,7 @@ class Delegate {
   std::vector<OperationDataType> operations_;
   struct OperationDataType op_info_;
   bool compiled_;
+  std::vector<int> subgraph_outputs_;
 
   absl::optional<bool> is_cache_present_;
   uint32_t device_id_;

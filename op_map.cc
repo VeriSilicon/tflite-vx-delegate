@@ -41,6 +41,7 @@
 #include "tensorflow/lite/kernels/kernel_util.h"
 #include "tensorflow/lite/kernels/lstm_shared.h"
 #include "tim/vx/ops.h"
+#include "tim/vx/tensor.h"
 #include "utils.h"
 #include "vsi_npu_custom_op.h"
 #include "delegate_main.h"
@@ -462,10 +463,32 @@ struct OpMapperBase : public vx::op_map::IOpMapper {
   }
 };
 
+void TransposeNHWC2NCHW(std::vector<uint8_t>& perm_data, uint8_t* data, const std::vector<uint32_t>& nhwc_shape){
+  int N=nhwc_shape[0], H=nhwc_shape[1], W=nhwc_shape[2], C=nhwc_shape[3];
+  int old_idx, new_idx;
+  for (int n=0; n<N; ++n) {
+    for (int h=0; h<H; ++h) {
+      for (int w=0; w<W; ++w) {
+        for (int c=0; c<C; ++c) {
+          old_idx = n*H*W*C + h*W*C + w*C + c;
+          new_idx = n*C*H*W + c*H*W + h*W + w;
+          perm_data[new_idx] = *(data + old_idx);
+        }
+      }
+    }
+  }
+}
+
 }  // namespace
 namespace vx {
 namespace op_map {
 
+static std::vector<uint8_t> weight_buff;
+static std::string md5_caculate;
+static const std::string md5_yolov4("1A5FF0C2D9D6377CC53CE56BE85663E8");
+static int conv_count = 0;
+static uint8_t* yolo_data1;
+static uint8_t* yolo_data2;
 template <typename T_OperationType>
 struct SimpleOpMapper : public OpMapperBase<EmptyStructPlaceholder> {
   std::string name_;
@@ -476,18 +499,17 @@ struct SimpleOpMapper : public OpMapperBase<EmptyStructPlaceholder> {
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
                    const void* params) override {
-    TFLITE_LOG(TFLITE_LOG_INFO, "Creating %s op", name_.c_str());
+    if (!((conv_count == 18 || conv_count == 21) && md5_caculate == md5_yolov4)) {
+      TFLITE_LOG(TFLITE_LOG_INFO, "Creating %s op", name_.c_str());
 
-    auto op = delegate->GetGraph()->CreateOperation<T_OperationType>();
-    (*op).BindInputs(inputs).BindOutputs(outputs);
+      auto op = delegate->GetGraph()->CreateOperation<T_OperationType>();
+      (*op).BindInputs(inputs).BindOutputs(outputs);
 
-    delegate->GetOps().push_back(std::move(op));
-
+      delegate->GetOps().push_back(std::move(op));
+    }
     return true;
   }
 };
-
-
 
 template <typename T_OperationType>
 struct PowMapper : public SimpleOpMapper<T_OperationType> {
@@ -608,6 +630,7 @@ struct SimpleOpWithFusedActivationMapper
     const auto builtin = reinterpret_cast<const T_Param*>(node->builtin_data);
     auto in_tensor0 = context->tensors[node->inputs->data[0]];
     auto out_tensor0 = context->tensors[node->outputs->data[0]];
+    static int add_cnt = 0;
     if (in_tensor0.type == kTfLiteInt16 &&
         (out_tensor0.type == kTfLiteUInt8 || out_tensor0.type == kTfLiteInt8) &&
         in_tensor0.quantization.type == kTfLiteAffineQuantization &&
@@ -623,6 +646,16 @@ struct SimpleOpWithFusedActivationMapper
                       "I32 input/I32 output is not supported in Relu1.");
       return false;
     }
+    if(registration->builtin_code == 0 && node->inputs->size == 2) {
+      auto in_tensor1 = context->tensors[node->inputs->data[1]];
+      ++add_cnt;
+      if(add_cnt == 1 && in_tensor1.allocation_type == kTfLiteMmapRo){
+        yolo_data1 = GetTensorData<uint8_t>(&in_tensor1);
+      }
+      if (add_cnt == 4 && in_tensor1.allocation_type == kTfLiteMmapRo){
+        yolo_data2 = GetTensorData<uint8_t>(&in_tensor1);
+      }
+    }
     return true;
   }
 
@@ -630,13 +663,15 @@ struct SimpleOpWithFusedActivationMapper
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
                    const void* params) override {
-    TFLITE_LOG(TFLITE_LOG_INFO, "Creating %s op", name_.c_str());
+    if (!((conv_count == 18 || conv_count == 21) && md5_caculate == md5_yolov4)) {
+      TFLITE_LOG(TFLITE_LOG_INFO, "Creating %s op", name_.c_str());
 
-    auto broadcasted_inputs = this->HandleNeedBroadcastOp(delegate, inputs, outputs, params);
-    auto op = delegate->GetGraph()->CreateOperation<T_OperationType>();
-    (*op).BindInputs(broadcasted_inputs);
-    (*op).BindOutputs(outputs);
-    delegate->GetOps().push_back(std::move(op));
+      auto broadcasted_inputs = this->HandleNeedBroadcastOp(delegate, inputs, outputs, params);
+      auto op = delegate->GetGraph()->CreateOperation<T_OperationType>();
+      (*op).BindInputs(broadcasted_inputs);
+      (*op).BindOutputs(outputs);
+      delegate->GetOps().push_back(std::move(op));
+    }
     return true;
   }
 };
@@ -872,6 +907,21 @@ struct Conv2dMapper : public Conv2dKind<TfLiteConvParams> {
                              const TfLiteRegistration* registration) const {
     auto input_tensor = context->tensors[node->inputs->data[0]];
     auto weight_tensor = context->tensors[node->inputs->data[1]];
+    if(weight_tensor.allocation_type == kTfLiteMmapRo) {
+      uint8_t* data = GetTensorData<uint8_t>(&weight_tensor);
+      std::vector<uint8_t> temp_buff(data, data + weight_tensor.bytes);
+      int length = weight_tensor.bytes;
+      static int cnt = 0;
+      if (cnt % 2 == 0) {
+        length < 512
+            ? std::copy_n(temp_buff.begin(), temp_buff.size(), std::back_inserter(weight_buff))
+            : std::copy_n(temp_buff.begin(), 512, std::back_inserter(weight_buff));
+      }
+      ++cnt;
+      if (cnt == 21) {
+        md5_caculate = tim::vx::Graph::caclulateMd5Secret32(std::string((const char*)weight_buff.data(), weight_buff.size()));
+      }
+    }
 
     if (input_tensor.type != weight_tensor.type) {
       TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
@@ -892,6 +942,7 @@ struct Conv2dMapper : public Conv2dKind<TfLiteConvParams> {
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
                    const void* params) override {
+    ++conv_count;
     // input layout CWHN, weight layout IWHO
     uint32_t groups = inputs[0]->GetShape()[0] / inputs[1]->GetShape()[0];
     uint32_t weights = inputs[1]->GetShape()[3];
@@ -908,7 +959,7 @@ struct Conv2dMapper : public Conv2dKind<TfLiteConvParams> {
           std::array<uint32_t, 2>(
               {builtin->stride_width, builtin->stride_height}),
           std::array<uint32_t, 2>({builtin->dilation_width_factor,
-                                   builtin->dilation_height_factor}),
+                                  builtin->dilation_height_factor}),
           0,
           tim::vx::DataLayout::CWHN);
     } else {
@@ -918,7 +969,7 @@ struct Conv2dMapper : public Conv2dKind<TfLiteConvParams> {
           std::array<uint32_t, 2>(
               {builtin->stride_width, builtin->stride_height}),
           std::array<uint32_t, 2>({builtin->dilation_width_factor,
-                                   builtin->dilation_height_factor}),
+                                  builtin->dilation_height_factor}),
           groups,
           tim::vx::DataLayout::CWHN);
     }
@@ -927,7 +978,35 @@ struct Conv2dMapper : public Conv2dKind<TfLiteConvParams> {
     (*op).BindOutputs(outputs);
 
     delegate->GetOps().push_back(std::move(op));
+    if (md5_caculate == md5_yolov4 && (conv_count == 18 || conv_count == 21)) {
+      int output_idx;
+      if(conv_count == 18) {
+        TFLITE_LOG(TFLITE_LOG_INFO, "Creating yolov4 op");
+        delegate->postproc_ = delegate->GetGraph()->CreateOperation<tim::vx::ops::TinyYolov4Postprocess>();
+        output_idx = delegate->GetGraphOutput(0);
+      } else {
+        output_idx = delegate->GetGraphOutput(1);
+      }
+      (*(delegate->postproc_)).BindInputs(outputs);
+      (*(delegate->postproc_)).BindOutput(delegate->GetTensors()[output_idx]);
+      auto spec = delegate->GetTensors()[output_idx]->GetSpec();
+      if (conv_count ==21){
+        std::vector<uint8_t> perm_data1(13 * 13 * 2);
+        std::vector<uint8_t> perm_data2(26 * 26 * 2);
+        TransposeNHWC2NCHW(perm_data1, yolo_data1, std::vector<uint32_t>{1, 13, 13, 2}); //NHWC
+        TransposeNHWC2NCHW(perm_data2, yolo_data2, std::vector<uint32_t>{1, 26, 26, 2}); //NHWC
+        tim::vx::Quantization yolo_quant1(tim::vx::QuantType::ASYMMETRIC, 0.09803921729326248, 0);
+        tim::vx::Quantization yolo_quant2(tim::vx::QuantType::ASYMMETRIC, 0.0470588244497776, 0);
+        tim::vx::TensorSpec yolo_const1(tim::vx::DataType::UINT8, std::vector<uint32_t>{13, 13, 2, 1},
+                                  tim::vx::TensorAttribute::CONSTANT, yolo_quant1); //WHCN
+        tim::vx::TensorSpec yolo_const2(tim::vx::DataType::UINT8, std::vector<uint32_t>{26, 26, 2, 1},
+                                  tim::vx::TensorAttribute::CONSTANT, yolo_quant2);
 
+        auto yolo_const_t1 = delegate->GetGraph()->CreateTensor(yolo_const1, perm_data1.data());
+        auto yolo_const_t2 = delegate->GetGraph()->CreateTensor(yolo_const2, perm_data2.data());
+        (*(delegate->postproc_)).BindInput(yolo_const_t1).BindInput(yolo_const_t2);
+      }
+    }
     return true;
   }
 };
@@ -1089,33 +1168,34 @@ struct ConcatenationMapper
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
                    const void* params) override {
-    TFLITE_LOG(TFLITE_LOG_INFO, "Creating Concatenation op");
-    const auto builtin =
-        reinterpret_cast<const TfLiteConcatenationParams*>(params);
-    auto output_tensor = outputs[0];
+    if (!((conv_count == 18 || conv_count == 21) && md5_caculate == md5_caculate)) {
+      TFLITE_LOG(TFLITE_LOG_INFO, "Creating Concatenation op");
+      const auto builtin =
+          reinterpret_cast<const TfLiteConcatenationParams*>(params);
+      auto output_tensor = outputs[0];
 
-    auto axis = vx::delegate::utils::ConvertAxis(builtin->axis,
-                                                 inputs[0]->GetShape().size());
+      auto axis = vx::delegate::utils::ConvertAxis(builtin->axis,
+                                                  inputs[0]->GetShape().size());
 
-    auto op = delegate->GetGraph()->CreateOperation<tim::vx::ops::Concat>(
-        axis, inputs.size());
+      auto op = delegate->GetGraph()->CreateOperation<tim::vx::ops::Concat>(
+          axis, inputs.size());
 
-    // If input from dynamic graph, tensor may have shape with 0
-    std::vector<std::shared_ptr<tim::vx::Tensor>> none_zero_inputs;
+      // If input from dynamic graph, tensor may have shape with 0
+      std::vector<std::shared_ptr<tim::vx::Tensor>> none_zero_inputs;
 
-    for(const auto& in : inputs) {
-      if (in->GetSpec().GetElementNum() != 0) {
-        none_zero_inputs.push_back(in);
-      } else {
-        TFLITE_LOG(TFLITE_LOG_INFO, "Remove zero sized tensor from concat's input list");
+      for(const auto& in : inputs) {
+        if (in->GetSpec().GetElementNum() != 0) {
+          none_zero_inputs.push_back(in);
+        } else {
+          TFLITE_LOG(TFLITE_LOG_INFO, "Remove zero sized tensor from concat's input list");
+        }
       }
+
+      (*op).BindInputs(none_zero_inputs);
+      (*op).BindOutputs(outputs);
+
+      delegate->GetOps().push_back(std::move(op));
     }
-
-    (*op).BindInputs(none_zero_inputs);
-    (*op).BindOutputs(outputs);
-
-    delegate->GetOps().push_back(std::move(op));
-
     return true;
   }
 };
@@ -1182,53 +1262,54 @@ struct ReshapeMapper : public OpMapperBase<TfLiteReshapeParams> {
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
                    const void* params) override {
-    TFLITE_LOG(TFLITE_LOG_INFO, "Creating Reshape op");
-    const auto builtin = reinterpret_cast<const TfLiteReshapeParams*>(params);
-    std::vector<int32_t> new_shape;
-    uint32_t total_size = 1, negative_index = 0;
-    std::vector<uint32_t> no_nagetive_shape;
-    bool do_shape_inference = false;
+    if (!((conv_count == 18 || conv_count == 21) && md5_caculate == md5_yolov4)) {
+      TFLITE_LOG(TFLITE_LOG_INFO, "Creating Reshape op");
+      const auto builtin = reinterpret_cast<const TfLiteReshapeParams*>(params);
+      std::vector<int32_t> new_shape;
+      uint32_t total_size = 1, negative_index = 0;
+      std::vector<uint32_t> no_nagetive_shape;
+      bool do_shape_inference = false;
 
-    // The new shape may be passed to reshape op by
-    // builtin prarameters or inputs[1], the two formats should be handled.
-    if (inputs.size() == 2 &&
-        inputs[1]->GetDataType() == tim::vx::DataType::INT32 &&
-        inputs[1]->GetShape().size() == 1 &&
-        inputs[1]->GetSpec().attr_ == tim::vx::TensorAttribute::CONSTANT) {
-      std::vector<int32_t> shape_from_input1(inputs[1]->GetShape()[0]);
-      inputs[1]->CopyDataFromTensor(shape_from_input1.data());
-      new_shape.assign(shape_from_input1.rbegin(), shape_from_input1.rend());
-    } else {
-      for (int i = builtin->num_dimensions - 1; i >= 0; i--) {
-        new_shape.push_back(static_cast<int32_t>(builtin->shape[i]));
-      }
-    }
-
-    for (uint32_t i = 0; i < inputs[0]->GetShape().size(); ++i) {
-      total_size *= inputs[0]->GetShape().at(i);
-    }
-    for (uint32_t i = 0; i < new_shape.size(); ++i) {
-      if (new_shape.at(i) != -1) {
-        total_size /= new_shape.at(i);
-        no_nagetive_shape.push_back(new_shape.at(i));
+      // The new shape may be passed to reshape op by
+      // builtin prarameters or inputs[1], the two formats should be handled.
+      if (inputs.size() == 2 &&
+          inputs[1]->GetDataType() == tim::vx::DataType::INT32 &&
+          inputs[1]->GetShape().size() == 1 &&
+          inputs[1]->GetSpec().attr_ == tim::vx::TensorAttribute::CONSTANT) {
+        std::vector<int32_t> shape_from_input1(inputs[1]->GetShape()[0]);
+        inputs[1]->CopyDataFromTensor(shape_from_input1.data());
+        new_shape.assign(shape_from_input1.rbegin(), shape_from_input1.rend());
       } else {
-        do_shape_inference = true;
-        negative_index = i;
-        no_nagetive_shape.push_back(0);  // hold a place for changes to the
-                                         // value
+        for (int i = builtin->num_dimensions - 1; i >= 0; i--) {
+          new_shape.push_back(static_cast<int32_t>(builtin->shape[i]));
+        }
       }
+
+      for (uint32_t i = 0; i < inputs[0]->GetShape().size(); ++i) {
+        total_size *= inputs[0]->GetShape().at(i);
+      }
+      for (uint32_t i = 0; i < new_shape.size(); ++i) {
+        if (new_shape.at(i) != -1) {
+          total_size /= new_shape.at(i);
+          no_nagetive_shape.push_back(new_shape.at(i));
+        } else {
+          do_shape_inference = true;
+          negative_index = i;
+          no_nagetive_shape.push_back(0);  // hold a place for changes to the
+                                          // value
+        }
+      }
+      if (do_shape_inference) {
+        no_nagetive_shape.at(negative_index) = total_size;
+      }
+
+      auto op = delegate->GetGraph()->CreateOperation<tim::vx::ops::Reshape>(
+          no_nagetive_shape);
+      (*op).BindInput(inputs[0]);
+      (*op).BindOutput(outputs[0]);
+
+      delegate->GetOps().push_back(std::move(op));
     }
-    if (do_shape_inference) {
-      no_nagetive_shape.at(negative_index) = total_size;
-    }
-
-    auto op = delegate->GetGraph()->CreateOperation<tim::vx::ops::Reshape>(
-        no_nagetive_shape);
-    (*op).BindInput(inputs[0]);
-    (*op).BindOutput(outputs[0]);
-
-    delegate->GetOps().push_back(std::move(op));
-
     return true;
   }
 };
@@ -1266,129 +1347,130 @@ struct StridedSliceMapper : public OpMapperBase<TfLiteStridedSliceParams> {
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
                    const void* params) override {
-    TFLITE_LOG(TFLITE_LOG_INFO, "Creating StridedSlice op");
-    const auto builtin =
-        reinterpret_cast<const TfLiteStridedSliceParams*>(params);
-    auto input_tensor = inputs[0];
-    auto begin_tensor = inputs[1];
-    auto end_tensor = inputs[2];
-    auto strides_tensor = inputs[3];
-    auto output_tensor = outputs[0];
-    auto const& input_shape = input_tensor->GetShape();
-    int begin_mask = builtin->begin_mask;
-    int end_mask = builtin->end_mask;
-    int ellipsis_mask = builtin->ellipsis_mask;
-    int shrink_axis_mask = builtin->shrink_axis_mask;
+    if (!((conv_count == 18 || conv_count == 21) && md5_caculate == md5_yolov4)) {
+      TFLITE_LOG(TFLITE_LOG_INFO, "Creating StridedSlice op");
+      const auto builtin =
+          reinterpret_cast<const TfLiteStridedSliceParams*>(params);
+      auto input_tensor = inputs[0];
+      auto begin_tensor = inputs[1];
+      auto end_tensor = inputs[2];
+      auto strides_tensor = inputs[3];
+      auto output_tensor = outputs[0];
+      auto const& input_shape = input_tensor->GetShape();
+      int begin_mask = builtin->begin_mask;
+      int end_mask = builtin->end_mask;
+      int ellipsis_mask = builtin->ellipsis_mask;
+      int shrink_axis_mask = builtin->shrink_axis_mask;
 
-    std::vector<int32_t> begin_dims(begin_tensor->GetShape()[0]);
-    begin_tensor->CopyDataFromTensor(begin_dims.data());
-    for (size_t i = 0; i < begin_dims.size(); i++) {
-      if(begin_dims[i] < 0) {
-        begin_dims[i] += input_tensor->GetShape()[begin_dims.size()-1-i];
-      }
-      if (begin_mask & (1 << i)) {
-        begin_dims[i] = -1;
-      }
-    }
-    std::reverse(begin_dims.begin(), begin_dims.end());
-
-    std::vector<int32_t> end_dims(end_tensor->GetShape()[0]);
-    int32_t end_pos = 1 + std::accumulate(input_shape.begin(),
-                                          input_shape.end(),
-                                          0,
-                                          [](int32_t lhs, int32_t rhs) {
-                                            return std::max(lhs, rhs);
-                                          });
-    end_tensor->CopyDataFromTensor(end_dims.data());
-    for (size_t i = 0; i < end_dims.size(); i++) {
-      if(end_dims[i] < 0) {
-        end_dims[i] += input_tensor->GetShape()[end_dims.size()-1-i];
-      }
-      if (end_mask & (1 << i)) {
-        end_dims[i] = end_pos;
-      }
-    }
-    std::reverse(end_dims.begin(), end_dims.end());
-
-    std::vector<int32_t> strides_dims(strides_tensor->GetShape()[0]);
-    strides_tensor->CopyDataFromTensor(strides_dims.data());
-    std::reverse(strides_dims.begin(), strides_dims.end());
-
-    if (ellipsis_mask) {
-      TFLITE_LOG_PROD(TFLITE_LOG_WARNING, "ellipsis_mask > 0 is not supported");
-    } else {
-      size_t i = begin_dims.size();
-      for (; i < input_shape.size(); i++) {
-        begin_dims.insert(begin_dims.begin(), -1);
-      }
-      i = end_dims.size();
-      for (; i < input_shape.size(); i++) {
-        end_dims.insert(end_dims.begin(), end_pos);
-      }
-      i = strides_dims.size();
-      for (; i < input_shape.size(); i++) {
-        strides_dims.insert(strides_dims.begin(), -1);
-      }
-    }
-
-    for (size_t i = 0; i < begin_dims.size(); i++) {
-      begin_dims[i] = begin_dims[i] == -1 ? 0 : begin_dims[i];
-    }
-
-    for (size_t i = 0; i < end_dims.size(); i++) {
-      end_dims[i] = end_dims[i] == end_pos ? input_shape[i] : end_dims[i];
-      end_dims[i] = end_dims[i] > static_cast<int32_t>(input_shape[i])
-                        ? input_shape[i]
-                        : end_dims[i];
-    }
-
-    for (size_t i = 0; i < strides_dims.size(); i++) {
-      strides_dims[i] = strides_dims[i] == -1 ? 1 : strides_dims[i];
-    }
-
-    if (begin_mask) {
-      int32_t t = 0;
-      int32_t input_dim = input_shape.size();
-      for (size_t i = 0; i < input_dim; i++) {
+      std::vector<int32_t> begin_dims(begin_tensor->GetShape()[0]);
+      begin_tensor->CopyDataFromTensor(begin_dims.data());
+      for (size_t i = 0; i < begin_dims.size(); i++) {
+        if(begin_dims[i] < 0) {
+          begin_dims[i] += input_tensor->GetShape()[begin_dims.size()-1-i];
+        }
         if (begin_mask & (1 << i)) {
-          t = t | (1 << (input_dim - i - 1));
+          begin_dims[i] = -1;
         }
       }
-      begin_mask = t;
-    }
-    if (shrink_axis_mask) {
-      int32_t t = 0;
-      int32_t input_dim = input_shape.size();
-      for (size_t i = 0; i < input_dim; i++) {
-        if (shrink_axis_mask & (1 << i)) {
-          t = t | (1 << (input_dim - i - 1));
+      std::reverse(begin_dims.begin(), begin_dims.end());
+
+      std::vector<int32_t> end_dims(end_tensor->GetShape()[0]);
+      int32_t end_pos = 1 + std::accumulate(input_shape.begin(),
+                                            input_shape.end(),
+                                            0,
+                                            [](int32_t lhs, int32_t rhs) {
+                                              return std::max(lhs, rhs);
+                                            });
+      end_tensor->CopyDataFromTensor(end_dims.data());
+      for (size_t i = 0; i < end_dims.size(); i++) {
+        if(end_dims[i] < 0) {
+          end_dims[i] += input_tensor->GetShape()[end_dims.size()-1-i];
         }
-      }
-      shrink_axis_mask = t;
-    }
-    if (end_mask) {
-      int32_t t = 0;
-      int32_t input_dim = input_shape.size();
-      for (size_t i = 0; i < input_dim; i++) {
         if (end_mask & (1 << i)) {
-          t = t | (1 << (input_dim - i - 1));
+          end_dims[i] = end_pos;
         }
       }
-      end_mask = t;
+      std::reverse(end_dims.begin(), end_dims.end());
+
+      std::vector<int32_t> strides_dims(strides_tensor->GetShape()[0]);
+      strides_tensor->CopyDataFromTensor(strides_dims.data());
+      std::reverse(strides_dims.begin(), strides_dims.end());
+
+      if (ellipsis_mask) {
+        TFLITE_LOG_PROD(TFLITE_LOG_WARNING, "ellipsis_mask > 0 is not supported");
+      } else {
+        size_t i = begin_dims.size();
+        for (; i < input_shape.size(); i++) {
+          begin_dims.insert(begin_dims.begin(), -1);
+        }
+        i = end_dims.size();
+        for (; i < input_shape.size(); i++) {
+          end_dims.insert(end_dims.begin(), end_pos);
+        }
+        i = strides_dims.size();
+        for (; i < input_shape.size(); i++) {
+          strides_dims.insert(strides_dims.begin(), -1);
+        }
+      }
+
+      for (size_t i = 0; i < begin_dims.size(); i++) {
+        begin_dims[i] = begin_dims[i] == -1 ? 0 : begin_dims[i];
+      }
+
+      for (size_t i = 0; i < end_dims.size(); i++) {
+        end_dims[i] = end_dims[i] == end_pos ? input_shape[i] : end_dims[i];
+        end_dims[i] = end_dims[i] > static_cast<int32_t>(input_shape[i])
+                          ? input_shape[i]
+                          : end_dims[i];
+      }
+
+      for (size_t i = 0; i < strides_dims.size(); i++) {
+        strides_dims[i] = strides_dims[i] == -1 ? 1 : strides_dims[i];
+      }
+
+      if (begin_mask) {
+        int32_t t = 0;
+        int32_t input_dim = input_shape.size();
+        for (size_t i = 0; i < input_dim; i++) {
+          if (begin_mask & (1 << i)) {
+            t = t | (1 << (input_dim - i - 1));
+          }
+        }
+        begin_mask = t;
+      }
+      if (shrink_axis_mask) {
+        int32_t t = 0;
+        int32_t input_dim = input_shape.size();
+        for (size_t i = 0; i < input_dim; i++) {
+          if (shrink_axis_mask & (1 << i)) {
+            t = t | (1 << (input_dim - i - 1));
+          }
+        }
+        shrink_axis_mask = t;
+      }
+      if (end_mask) {
+        int32_t t = 0;
+        int32_t input_dim = input_shape.size();
+        for (size_t i = 0; i < input_dim; i++) {
+          if (end_mask & (1 << i)) {
+            t = t | (1 << (input_dim - i - 1));
+          }
+        }
+        end_mask = t;
+      }
+
+      auto op = delegate->GetGraph()->CreateOperation<tim::vx::ops::StridedSlice>(
+          begin_dims,
+          end_dims,
+          strides_dims,
+          begin_mask,
+          end_mask,
+          shrink_axis_mask);
+      (*op).BindInput(input_tensor);
+      (*op).BindOutput(output_tensor);
+
+      delegate->GetOps().push_back(std::move(op));
     }
-
-    auto op = delegate->GetGraph()->CreateOperation<tim::vx::ops::StridedSlice>(
-        begin_dims,
-        end_dims,
-        strides_dims,
-        begin_mask,
-        end_mask,
-        shrink_axis_mask);
-    (*op).BindInput(input_tensor);
-    (*op).BindOutput(output_tensor);
-
-    delegate->GetOps().push_back(std::move(op));
-
     return true;
   }
 };

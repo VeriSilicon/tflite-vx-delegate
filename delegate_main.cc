@@ -513,7 +513,7 @@ std::unique_ptr<vx::delegate::OpData> Delegate::Init(
       }
     }
   }
-
+  delegate::Delegate::subgraph_outputs_ = op_data->subgraph_outputs;
   return op_data;
 }
 
