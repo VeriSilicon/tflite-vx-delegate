@@ -482,13 +482,14 @@ void TransposeNHWC2NCHW(std::vector<uint8_t>& perm_data, uint8_t* data, const st
 }  // namespace
 namespace vx {
 namespace op_map {
-
+#ifdef VSI_FEAT_OP_CUSTOM_TINY_YOLOV4_POSTPROCESS
 static std::vector<uint8_t> weight_buff;
-static std::string md5_caculate;
+static std::string md5_calculate;
 static const std::string md5_yolov4("1A5FF0C2D9D6377CC53CE56BE85663E8");
 static int conv_count = 0;
-static uint8_t* yolo_data1;
-static uint8_t* yolo_data2;
+static uint8_t* yolo_const_tensor1_data; //first const tensor data for yolo op
+static uint8_t* yolo_const_tensor2_data; //second const tensor data for yolo op
+#endif
 template <typename T_OperationType>
 struct SimpleOpMapper : public OpMapperBase<EmptyStructPlaceholder> {
   std::string name_;
@@ -499,14 +500,18 @@ struct SimpleOpMapper : public OpMapperBase<EmptyStructPlaceholder> {
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
                    const void* params) override {
-    if (!((conv_count == 18 || conv_count == 21) && md5_caculate == md5_yolov4)) {
+#ifdef VSI_FEAT_OP_CUSTOM_TINY_YOLOV4_POSTPROCESS
+    if (!((conv_count == 18 || conv_count == 21) && md5_calculate == md5_yolov4)) {
+#endif
       TFLITE_LOG(TFLITE_LOG_INFO, "Creating %s op", name_.c_str());
 
       auto op = delegate->GetGraph()->CreateOperation<T_OperationType>();
       (*op).BindInputs(inputs).BindOutputs(outputs);
 
       delegate->GetOps().push_back(std::move(op));
+#ifdef VSI_FEAT_OP_CUSTOM_TINY_YOLOV4_POSTPROCESS
     }
+#endif
     return true;
   }
 };
@@ -630,7 +635,6 @@ struct SimpleOpWithFusedActivationMapper
     const auto builtin = reinterpret_cast<const T_Param*>(node->builtin_data);
     auto in_tensor0 = context->tensors[node->inputs->data[0]];
     auto out_tensor0 = context->tensors[node->outputs->data[0]];
-    static int add_cnt = 0;
     if (in_tensor0.type == kTfLiteInt16 &&
         (out_tensor0.type == kTfLiteUInt8 || out_tensor0.type == kTfLiteInt8) &&
         in_tensor0.quantization.type == kTfLiteAffineQuantization &&
@@ -646,16 +650,19 @@ struct SimpleOpWithFusedActivationMapper
                       "I32 input/I32 output is not supported in Relu1.");
       return false;
     }
+#ifdef VSI_FEAT_OP_CUSTOM_TINY_YOLOV4_POSTPROCESS
+    static int add_cnt = 0;
     if(registration->builtin_code == 0 && node->inputs->size == 2) {
       auto in_tensor1 = context->tensors[node->inputs->data[1]];
       ++add_cnt;
       if(add_cnt == 1 && in_tensor1.allocation_type == kTfLiteMmapRo){
-        yolo_data1 = GetTensorData<uint8_t>(&in_tensor1);
+        yolo_const_tensor1_data = GetTensorData<uint8_t>(&in_tensor1);
       }
       if (add_cnt == 4 && in_tensor1.allocation_type == kTfLiteMmapRo){
-        yolo_data2 = GetTensorData<uint8_t>(&in_tensor1);
+        yolo_const_tensor2_data = GetTensorData<uint8_t>(&in_tensor1);
       }
     }
+#endif
     return true;
   }
 
@@ -663,7 +670,9 @@ struct SimpleOpWithFusedActivationMapper
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
                    const void* params) override {
-    if (!((conv_count == 18 || conv_count == 21) && md5_caculate == md5_yolov4)) {
+#ifdef VSI_FEAT_OP_CUSTOM_TINY_YOLOV4_POSTPROCESS
+    if (!((conv_count == 18 || conv_count == 21) && md5_calculate == md5_yolov4)) {
+#endif
       TFLITE_LOG(TFLITE_LOG_INFO, "Creating %s op", name_.c_str());
 
       auto broadcasted_inputs = this->HandleNeedBroadcastOp(delegate, inputs, outputs, params);
@@ -671,7 +680,9 @@ struct SimpleOpWithFusedActivationMapper
       (*op).BindInputs(broadcasted_inputs);
       (*op).BindOutputs(outputs);
       delegate->GetOps().push_back(std::move(op));
+#ifdef VSI_FEAT_OP_CUSTOM_TINY_YOLOV4_POSTPROCESS
     }
+#endif
     return true;
   }
 };
@@ -907,6 +918,7 @@ struct Conv2dMapper : public Conv2dKind<TfLiteConvParams> {
                              const TfLiteRegistration* registration) const {
     auto input_tensor = context->tensors[node->inputs->data[0]];
     auto weight_tensor = context->tensors[node->inputs->data[1]];
+#ifdef VSI_FEAT_OP_CUSTOM_TINY_YOLOV4_POSTPROCESS
     if(weight_tensor.allocation_type == kTfLiteMmapRo) {
       uint8_t* data = GetTensorData<uint8_t>(&weight_tensor);
       std::vector<uint8_t> temp_buff(data, data + weight_tensor.bytes);
@@ -919,10 +931,10 @@ struct Conv2dMapper : public Conv2dKind<TfLiteConvParams> {
       }
       ++cnt;
       if (cnt == 21) {
-        md5_caculate = tim::vx::Graph::caclulateMd5Secret32(std::string((const char*)weight_buff.data(), weight_buff.size()));
+        md5_calculate = tim::vx::calculateMd5Secret32(std::string((const char*)weight_buff.data(), weight_buff.size()));
       }
     }
-
+#endif
     if (input_tensor.type != weight_tensor.type) {
       TFLITE_LOG_PROD(TFLITE_LOG_ERROR,
                       "hybrid data type is not supported in conv2d.");
@@ -942,7 +954,6 @@ struct Conv2dMapper : public Conv2dKind<TfLiteConvParams> {
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
                    const void* params) override {
-    ++conv_count;
     // input layout CWHN, weight layout IWHO
     uint32_t groups = inputs[0]->GetShape()[0] / inputs[1]->GetShape()[0];
     uint32_t weights = inputs[1]->GetShape()[3];
@@ -978,7 +989,9 @@ struct Conv2dMapper : public Conv2dKind<TfLiteConvParams> {
     (*op).BindOutputs(outputs);
 
     delegate->GetOps().push_back(std::move(op));
-    if (md5_caculate == md5_yolov4 && (conv_count == 18 || conv_count == 21)) {
+#ifdef VSI_FEAT_OP_CUSTOM_TINY_YOLOV4_POSTPROCESS
+    ++conv_count;
+    if (md5_calculate == md5_yolov4 && (conv_count == 18 || conv_count == 21)) {
       int output_idx;
       if(conv_count == 18) {
         TFLITE_LOG(TFLITE_LOG_INFO, "Creating yolov4 op");
@@ -993,8 +1006,8 @@ struct Conv2dMapper : public Conv2dKind<TfLiteConvParams> {
       if (conv_count ==21){
         std::vector<uint8_t> perm_data1(13 * 13 * 2);
         std::vector<uint8_t> perm_data2(26 * 26 * 2);
-        TransposeNHWC2NCHW(perm_data1, yolo_data1, std::vector<uint32_t>{1, 13, 13, 2}); //NHWC
-        TransposeNHWC2NCHW(perm_data2, yolo_data2, std::vector<uint32_t>{1, 26, 26, 2}); //NHWC
+        TransposeNHWC2NCHW(perm_data1, yolo_const_tensor1_data, std::vector<uint32_t>{1, 13, 13, 2}); //NHWC
+        TransposeNHWC2NCHW(perm_data2, yolo_const_tensor2_data, std::vector<uint32_t>{1, 26, 26, 2}); //NHWC
         tim::vx::Quantization yolo_quant1(tim::vx::QuantType::ASYMMETRIC, 0.09803921729326248, 0);
         tim::vx::Quantization yolo_quant2(tim::vx::QuantType::ASYMMETRIC, 0.0470588244497776, 0);
         tim::vx::TensorSpec yolo_const1(tim::vx::DataType::UINT8, std::vector<uint32_t>{13, 13, 2, 1},
@@ -1007,6 +1020,7 @@ struct Conv2dMapper : public Conv2dKind<TfLiteConvParams> {
         (*(delegate->postproc_)).BindInput(yolo_const_t1).BindInput(yolo_const_t2);
       }
     }
+#endif
     return true;
   }
 };
@@ -1168,7 +1182,9 @@ struct ConcatenationMapper
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
                    const void* params) override {
-    if (!((conv_count == 18 || conv_count == 21) && md5_caculate == md5_caculate)) {
+#ifdef VSI_FEAT_OP_CUSTOM_TINY_YOLOV4_POSTPROCESS
+    if (!((conv_count == 18 || conv_count == 21) && md5_calculate == md5_calculate)) {
+#endif
       TFLITE_LOG(TFLITE_LOG_INFO, "Creating Concatenation op");
       const auto builtin =
           reinterpret_cast<const TfLiteConcatenationParams*>(params);
@@ -1195,7 +1211,9 @@ struct ConcatenationMapper
       (*op).BindOutputs(outputs);
 
       delegate->GetOps().push_back(std::move(op));
+#ifdef VSI_FEAT_OP_CUSTOM_TINY_YOLOV4_POSTPROCESS
     }
+#endif
     return true;
   }
 };
@@ -1262,7 +1280,9 @@ struct ReshapeMapper : public OpMapperBase<TfLiteReshapeParams> {
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
                    const void* params) override {
-    if (!((conv_count == 18 || conv_count == 21) && md5_caculate == md5_yolov4)) {
+#ifdef VSI_FEAT_OP_CUSTOM_TINY_YOLOV4_POSTPROCESS
+    if (!((conv_count == 18 || conv_count == 21) && md5_calculate == md5_yolov4)) {
+#endif
       TFLITE_LOG(TFLITE_LOG_INFO, "Creating Reshape op");
       const auto builtin = reinterpret_cast<const TfLiteReshapeParams*>(params);
       std::vector<int32_t> new_shape;
@@ -1309,7 +1329,9 @@ struct ReshapeMapper : public OpMapperBase<TfLiteReshapeParams> {
       (*op).BindOutput(outputs[0]);
 
       delegate->GetOps().push_back(std::move(op));
+#ifdef VSI_FEAT_OP_CUSTOM_TINY_YOLOV4_POSTPROCESS
     }
+#endif
     return true;
   }
 };
@@ -1347,7 +1369,9 @@ struct StridedSliceMapper : public OpMapperBase<TfLiteStridedSliceParams> {
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
                    const void* params) override {
-    if (!((conv_count == 18 || conv_count == 21) && md5_caculate == md5_yolov4)) {
+#ifdef VSI_FEAT_OP_CUSTOM_TINY_YOLOV4_POSTPROCESS
+    if (!((conv_count == 18 || conv_count == 21) && md5_calculate == md5_yolov4)) {
+#endif
       TFLITE_LOG(TFLITE_LOG_INFO, "Creating StridedSlice op");
       const auto builtin =
           reinterpret_cast<const TfLiteStridedSliceParams*>(params);
@@ -1470,7 +1494,9 @@ struct StridedSliceMapper : public OpMapperBase<TfLiteStridedSliceParams> {
       (*op).BindOutput(output_tensor);
 
       delegate->GetOps().push_back(std::move(op));
+#ifdef VSI_FEAT_OP_CUSTOM_TINY_YOLOV4_POSTPROCESS
     }
+#endif
     return true;
   }
 };
