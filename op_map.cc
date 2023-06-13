@@ -408,24 +408,24 @@ struct OpMapperBase : public vx::op_map::IOpMapper {
     return false;
   }
 
-  std::vector<int32_t> ExtendBroadcast(const std::shared_ptr<tim::vx::Tensor>& base_shape_tensor,
-                  const std::shared_ptr<tim::vx::Tensor>& required_broadcast_tensor){
+  std::vector<uint32_t> ExtendReshape(const std::shared_ptr<tim::vx::Tensor>& base_shape_tensor,
+                  const std::shared_ptr<tim::vx::Tensor>& required_reshape_tensor){
      std::vector<uint32_t> shape (base_shape_tensor->GetShape().size());
-     std::vector<int32_t> broadcast_param;
+     std::vector<uint32_t> reshape_param;
      for(int i = 0; i < base_shape_tensor->GetShape().size();i++){
-      shape[i] = i < required_broadcast_tensor->GetShape().size() ?
-                 required_broadcast_tensor->GetShape()[i] : 1;
-      broadcast_param.push_back(shape[i]);
+      shape[i] = i < required_reshape_tensor->GetShape().size() ?
+                 required_reshape_tensor->GetShape()[i] : 1;
+      reshape_param.push_back(shape[i]);
      }
-     return broadcast_param;
+     return reshape_param;
   }
 
-  std::vector<std::shared_ptr<tim::vx::Tensor>> HandleNeedBroadcastOp(
+  std::vector<std::shared_ptr<tim::vx::Tensor>> HandleNeedReshapeOp(
         vx::delegate::Delegate* delegate,
         std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
         std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
         const void* params) {
-    bool broadcast_required = (inputs[0]->GetShape().size() != inputs[1]->GetShape().size());
+    bool reshape_required = (inputs[0]->GetShape().size() != inputs[1]->GetShape().size());
     std::vector<std::shared_ptr<tim::vx::Tensor>> elementwise_inputs;
 
     for (auto &t : inputs){
@@ -435,25 +435,26 @@ struct OpMapperBase : public vx::op_map::IOpMapper {
         }
     }
 
-    if (broadcast_required) {
+    if (reshape_required) {
       int base_shape_idx = inputs[0]->GetShape().size() >
                   inputs[1]->GetShape().size()? 0 : 1;
-      std::vector<int32_t> broadcast_param;
-      broadcast_param = ExtendBroadcast(inputs[base_shape_idx], inputs[1-base_shape_idx]);
-      tim::vx::TensorSpec broadcast_spec (inputs[1-base_shape_idx]->GetSpec().AsTransientSpec());
+      std::vector<uint32_t> reshape_param;
+      reshape_param = ExtendReshape(inputs[base_shape_idx], inputs[1-base_shape_idx]);
+      tim::vx::TensorSpec reshape_spec (inputs[1-base_shape_idx]->GetSpec().AsTransientSpec());
+      reshape_spec.SetShape(reshape_param);
 
-      auto broadcast_out = delegate->GetGraph()->CreateTensor(broadcast_spec);
-      auto op_broadcast =
-            delegate->GetGraph()->CreateOperation<tim::vx::ops::Broadcast>(
-                broadcast_param);
-        (*op_broadcast).BindInput(inputs[1-base_shape_idx]).BindOutput(broadcast_out);
+      auto reshape_out = delegate->GetGraph()->CreateTensor(reshape_spec);
+      auto op_reshape =
+            delegate->GetGraph()->CreateOperation<tim::vx::ops::Reshape>(
+                reshape_param);
+        (*op_reshape).BindInput(inputs[1-base_shape_idx]).BindOutput(reshape_out);
 
         if(base_shape_idx == 0){
           elementwise_inputs.push_back(inputs[base_shape_idx]);
-          elementwise_inputs.push_back(broadcast_out);
+          elementwise_inputs.push_back(reshape_out);
         }
         else{
-          elementwise_inputs.push_back(broadcast_out);
+          elementwise_inputs.push_back(reshape_out);
           elementwise_inputs.push_back(inputs[base_shape_idx]);
         }
 
@@ -675,9 +676,9 @@ struct SimpleOpWithFusedActivationMapper
 #endif
       TFLITE_LOG(TFLITE_LOG_INFO, "Creating %s op", name_.c_str());
 
-      auto broadcasted_inputs = this->HandleNeedBroadcastOp(delegate, inputs, outputs, params);
+      auto reshaped_inputs = this->HandleNeedReshapeOp(delegate, inputs, outputs, params);
       auto op = delegate->GetGraph()->CreateOperation<T_OperationType>();
-      (*op).BindInputs(broadcasted_inputs);
+      (*op).BindInputs(reshaped_inputs);
       (*op).BindOutputs(outputs);
       delegate->GetOps().push_back(std::move(op));
 #ifdef VSI_FEAT_OP_CUSTOM_TINY_YOLOV4_POSTPROCESS
@@ -700,9 +701,9 @@ struct SimpleOpWithBroadcastNoActivationMapper
                    const void* params) override {
     TFLITE_LOG(TFLITE_LOG_INFO, "Creating %s op", name_.c_str());
 
-    auto broadcasted_inputs = this->HandleNeedBroadcastOp(delegate, inputs, outputs, params);
+    auto reshaped_inputs = this->HandleNeedReshapeOp(delegate, inputs, outputs, params);
     auto op = delegate->GetGraph()->CreateOperation<T_OperationType>();
-    (*op).BindInputs(broadcasted_inputs);
+    (*op).BindInputs(reshaped_inputs);
     (*op).BindOutputs(outputs);
     delegate->GetOps().push_back(std::move(op));
     return true;
@@ -780,10 +781,10 @@ struct MinimumMapper : public OpMapperBase<tim::vx::ops::Minimum> {
       }
     }  // handle constant second input
 
-    auto broadcasted_inputs =
-        this->HandleNeedBroadcastOp(delegate, inputs, outputs, params);
+    auto reshaped_inputs =
+        this->HandleNeedReshapeOp(delegate, inputs, outputs, params);
     auto op = delegate->GetGraph()->CreateOperation<tim::vx::ops::Minimum>();
-    (*op).BindInputs(broadcasted_inputs);  // Bind if second input is not
+    (*op).BindInputs(reshaped_inputs);  // Bind if second input is not
                                            // constant or not suitable to bypass
     (*op).BindOutputs(outputs);
     delegate->GetOps().push_back(std::move(op));
