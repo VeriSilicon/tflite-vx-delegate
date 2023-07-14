@@ -18,7 +18,7 @@ def test_conv2d(delegate_lib, batch_size, in_w, in_h, in_ch, out_ch, k_w, k_h, q
 
     def rand_calibration():
         for _ in range(100):
-            yield [tf.random.normal((batch_size, in_h, in_w, in_ch), 0, 127, input_dtype)]
+            yield [ tf.random.normal((batch_size, in_h, in_w, in_ch), 0, 127, input_dtype) ]
 
     model = keras.models.Sequential([
         keras.layers.Input(shape = input_shape[1:], batch_size= input_shape[0]),
@@ -31,7 +31,7 @@ def test_conv2d(delegate_lib, batch_size, in_w, in_h, in_ch, out_ch, k_w, k_h, q
     if (qtype is True):
         converter.representative_dataset = rand_calibration
         converter.inference_input_type = tf.int8
-        converter.inference_input_type = tf.int8
+        converter.inference_output_type = tf.int8
 
     fp = tempfile.NamedTemporaryFile()
     tflite_model = converter.convert()

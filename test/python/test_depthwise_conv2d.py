@@ -37,7 +37,7 @@ def test_depthwise_conv2d(delegate_lib, batch_size, channels, rows, cols, multip
     if (qtype is True):
         converter.representative_dataset = rand_dataset
         converter.inference_input_type = tf.int8
-        converter.inference_input_type = tf.int8
+        converter.inference_output_type = tf.int8
 
     fp = tempfile.NamedTemporaryFile()
     tflite_model = converter.convert()
