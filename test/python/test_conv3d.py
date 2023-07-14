@@ -27,14 +27,14 @@ def test_conv3d(delegate_lib, batch_size, in_w, in_h, in_d, in_ch, out_ch, k_w, 
     def rand_calibration():
         for _ in range(100):
             yield [tf.random.normal(input_shape[0:], 0, 127, input_dtype)]
-    
+
     if (qtype is True):
         converter.optimizations = [tf.lite.Optimize.DEFAULT]
         converter.representative_dataset = rand_calibration
         converter.inference_input_type = tf.int8
-        converter.inference_input_type = tf.int8
-    
-    tflite_model = converter.convert()       
+        converter.inference_output_type = tf.int8
+
+    tflite_model = converter.convert()
     model_path = "./test_model.tflite"
     open(model_path, "wb").write(tflite_model)
 

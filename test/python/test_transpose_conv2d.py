@@ -38,7 +38,7 @@ def test_transpose_conv2d(delegate_lib, batch_size, channels, filters, rows, col
     if (qtype is True):
         converter.representative_dataset = rand_dataset
         converter.inference_input_type = tf.int8
-        converter.inference_input_type = tf.int8
+        converter.inference_output_type = tf.int8
     tflite_model = converter.convert()
 
     npu_ = utils.npu(delegate_lib)

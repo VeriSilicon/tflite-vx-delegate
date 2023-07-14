@@ -41,7 +41,7 @@ def test_attention(delegate_lib, save_model, num_of_seq, seq_len, in_num_heads, 
         converter.optimizations = [tf.lite.Optimize.DEFAULT]
         converter.representative_dataset = rand_dataset
         converter.inference_input_type = tf.int8
-        converter.inference_input_type = tf.int8
+        converter.inference_output_type = tf.int8
 
     tflite_model = converter.convert()
 
