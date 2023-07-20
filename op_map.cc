@@ -233,7 +233,8 @@ bool ResizeToTransposeConv(
       output_padding,
       pad,
       1,
-      tim::vx::DataLayout::CWHN);
+      tim::vx::DataLayout::CWHN,
+      tim::vx::DataLayout::IcWHOc);
 
   std::vector<std::shared_ptr<tim::vx::Tensor>> final_inputs;
   final_inputs.push_back(inputs[0]);
@@ -973,7 +974,8 @@ struct Conv2dMapper : public Conv2dKind<TfLiteConvParams> {
           std::array<uint32_t, 2>({builtin->dilation_width_factor,
                                   builtin->dilation_height_factor}),
           0,
-          tim::vx::DataLayout::CWHN);
+          tim::vx::DataLayout::CWHN,
+          tim::vx::DataLayout::IcWHOc);
     } else {
       TFLITE_LOG(TFLITE_LOG_INFO, "Creating Grouped Conv2d op");
       op = delegate->GetGraph()->CreateOperation<tim::vx::ops::GroupedConv2d>(
@@ -983,7 +985,8 @@ struct Conv2dMapper : public Conv2dKind<TfLiteConvParams> {
           std::array<uint32_t, 2>({builtin->dilation_width_factor,
                                   builtin->dilation_height_factor}),
           groups,
-          tim::vx::DataLayout::CWHN);
+          tim::vx::DataLayout::CWHN,
+          tim::vx::DataLayout::IcWHOc);
     }
 
     (*op).BindInputs(inputs);
@@ -1165,7 +1168,8 @@ struct DepthwiseConv2dMapper : public Conv2dKind<TfLiteDepthwiseConvParams> {
         std::array<uint32_t, 2>(
             {builtin->dilation_width_factor, builtin->dilation_height_factor}),
         builtin->depth_multiplier,
-        tim::vx::DataLayout::CWHN);
+        tim::vx::DataLayout::CWHN,
+        tim::vx::DataLayout::IcWHOc);
 
     (*op).BindInputs(inputs);
     (*op).BindOutputs(outputs);
