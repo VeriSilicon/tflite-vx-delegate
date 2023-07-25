@@ -1188,7 +1188,7 @@ struct ConcatenationMapper
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
                    const void* params) override {
 #ifdef VSI_FEAT_OP_CUSTOM_TINY_YOLOV4_POSTPROCESS
-    if (!((conv_count == 18 || conv_count == 21) && md5_calculate == md5_calculate)) {
+    if (!((conv_count == 18 || conv_count == 21) && md5_calculate == md5_yolov4)) {
 #endif
       TFLITE_LOG(TFLITE_LOG_INFO, "Creating Concatenation op");
       const auto builtin =
