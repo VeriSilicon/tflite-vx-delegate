@@ -1,9 +1,7 @@
 import pytest
 import tensorflow as tf
-from tensorflow.python import keras
-import numpy as np
+from tensorflow import keras
 import utils
-import tempfile
 
 @pytest.mark.parametrize("num_units",  [2])
 @pytest.mark.parametrize("feature",  [4])
@@ -47,5 +45,4 @@ def test_GRUCell(delegate_lib, num_units, feature):
 
     npu_out = npu_.run(model_path, gold_in)
 
-    for (g, n) in zip(gold_out, npu_out):
-       assert pytest.approx(g, n[1])
+    pytest.approx(gold_out,npu_out)

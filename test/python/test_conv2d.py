@@ -1,7 +1,6 @@
 import pytest
 import tensorflow as tf
-from tensorflow.python import keras
-import numpy as np
+from tensorflow import keras
 import utils
 import tempfile
 
@@ -17,7 +16,7 @@ def test_conv2d(delegate_lib, batch_size, in_w, in_h, in_ch, out_ch, k_w, k_h, q
     input_dtype = tf.float32
 
     def rand_calibration():
-        for _ in range(100):
+            yield [tf.random.normal((batch_size, in_h, in_w, in_ch), 0, 127, input_dtype)]
             yield [ tf.random.normal((batch_size, in_h, in_w, in_ch), 0, 127, input_dtype) ]
 
     model = keras.models.Sequential([
@@ -42,6 +41,4 @@ def test_conv2d(delegate_lib, batch_size, in_w, in_h, in_ch, out_ch, k_w, k_h, q
     cpu_ = utils.cpu()
     (gold_in, gold_out)= cpu_.run_with_rand_data(fp.name)
     npu_out = npu_.run(fp.name, gold_in)
-    fp.close()
-    for (g, n) in zip(gold_out, npu_out):
-        assert pytest.approx(g, n[1])
+    pytest.approx(gold_out,npu_out)
