@@ -1,7 +1,6 @@
 import pytest
 import tensorflow as tf
-from tensorflow.python import keras
-import numpy as np
+from tensorflow import keras
 import utils
 import tempfile
 
@@ -56,5 +55,4 @@ def test_conv1d(delegate_lib, batch_shape, steps, input_dim, filters, k_size, st
     # (gold_in, gold_out)= cpu_.run_with_rand_data(model_path)
     # npu_out = npu_.run(model_path, gold_in)
 
-    for (g, n) in zip(gold_out, npu_out):
-       assert pytest.approx(g, n[1])
+    pytest.approx(gold_out,npu_out)

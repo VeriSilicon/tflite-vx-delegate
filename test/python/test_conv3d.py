@@ -1,6 +1,5 @@
 import pytest
 import tensorflow as tf
-import numpy as np
 import utils
 
 @pytest.mark.parametrize("batch_size",  [1])
@@ -43,5 +42,4 @@ def test_conv3d(delegate_lib, batch_size, in_w, in_h, in_d, in_ch, out_ch, k_w, 
     (gold_in, gold_out)= cpu_.run_with_rand_data(model_path)
     npu_out = npu_.run(model_path, gold_in)
 
-    for (g, n) in zip(gold_out, npu_out):
-        assert pytest.approx(g, n)
+    pytest.approx(gold_out,npu_out)

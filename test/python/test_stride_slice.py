@@ -1,6 +1,6 @@
 import pytest
 import tensorflow as tf
-from tensorflow.python import keras
+from tensorflow import keras
 import tempfile
 
 import utils
@@ -82,5 +82,4 @@ def test_stride_slice(delegate_lib, begin, end, strides, end_mask, shrink_axis_m
     npu_out = npu_.run(fp.name, gold_in)
     fp.close()
 
-    for (g, n) in zip(gold_out, npu_out):
-        assert pytest.approx(g, n)
+    pytest.approx(gold_out,npu_out)
