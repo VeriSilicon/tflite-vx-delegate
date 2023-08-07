@@ -39,6 +39,7 @@
 #include "tensorflow/lite/kernels/internal/tensor_ctypes.h"
 #include "tensorflow/lite/kernels/internal/types.h"
 #include "tim/transform/layout_inference.h"
+#include "tim/transform/mean_stddev_normalize_fusion.h"
 
 using namespace tflite;
 namespace {
@@ -636,6 +637,8 @@ TfLiteStatus Delegate::Invoke(const OpData& op_data,
     }
 
     TFLITE_LOG(TFLITE_LOG_INFO, "Verifying graph");
+    // Do normalization op fusion before layout inference
+    tim::transform::MeanStdDevNormalization(graph_);
     // Do layout inference and get a new graph(first) and a tensor map(second).
     layout_infered_ = tim::transform::LayoutInference(graph_, context_);
 #ifdef MULTI_DEVICE_FEATURE_MODE
