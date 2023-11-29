@@ -3283,17 +3283,6 @@ struct LogicalOpMapper : public OpMapperBase<EmptyStructPlaceholder> {
 };
 
 struct PackMapper : public OpMapperBase<TfLitePackParams> {
-  virtual bool IsOpSupported(TfLiteContext* context,
-                             TfLiteNode* node,
-                             const TfLiteRegistration* registration) const {
-    auto input_tensor = context->tensors[node->inputs->data[0]];
-    if (input_tensor.type == kTfLiteInt32 ||
-        (input_tensor.dims->size == 1 && (input_tensor.type == kTfLiteInt8 ||
-                                          input_tensor.type == kTfLiteUInt8))) {
-      return false;
-    }
-    return true;
-  }
   bool HandleMapOp(vx::delegate::Delegate* delegate,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& inputs,
                    std::vector<std::shared_ptr<tim::vx::Tensor>>& outputs,
