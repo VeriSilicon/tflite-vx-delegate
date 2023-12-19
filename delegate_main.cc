@@ -529,6 +529,9 @@ TfLiteStatus Delegate::Invoke(const OpData& op_data,
                               TfLiteContext* context,
                               TfLiteNode* node) {
   TFLITE_LOG(TFLITE_LOG_INFO, "Delegate::Invoke node: %p", node->user_data);
+  char* node_trace_enable = getenv("VIV_VX_DUMP_NODE_TRACE_DB");
+  std::vector<vx::delegate::TfliteNodeIDPair> tflite_node_id_map;
+
   if (!compiled_) {
     // TODO(bo): Handling multi-thread use case
     context_ = tim::vx::Context::Create();
@@ -562,11 +565,27 @@ TfLiteStatus Delegate::Invoke(const OpData& op_data,
       auto& states = op_info.states;
       auto& builtin_data = op_info.builtin_data;
 
+      vx::delegate::TfliteNodeIDPair tflite_node_id_pair;
+      std::vector<std::shared_ptr<tim::vx::Operation>> before_op_vector;
+      std::vector<std::shared_ptr<tim::vx::Operation>> after_op_vector;
+
       std::vector<int> inputs_outputs;
       std::copy(
           inputs.begin(), inputs.end(), std::back_inserter(inputs_outputs));
       std::copy(
           outputs.begin(), outputs.end(), std::back_inserter(inputs_outputs));
+
+      if(node_trace_enable && *node_trace_enable != 0)
+      {
+        tflite_node_id_pair.builtin_code = builtin_code;
+        std::copy(
+            inputs.begin(), inputs.end(), std::back_inserter(tflite_node_id_pair.inputs));
+        std::copy(
+            outputs.begin(), outputs.end(), std::back_inserter(tflite_node_id_pair.outputs));
+        std::copy(
+            this->GetGraph()->OpVector().begin(), this->GetGraph()->OpVector().end(), std::back_inserter(before_op_vector));
+        tflite_node_id_map.push_back(tflite_node_id_pair);
+      }
 
       for (size_t port_idx = 0; port_idx < inputs_outputs.size(); port_idx++) {
         int tensor_idx = inputs_outputs[port_idx];
@@ -634,6 +653,15 @@ TfLiteStatus Delegate::Invoke(const OpData& op_data,
                     states_tensors,
                     builtin_data.data());
       }
+      if(node_trace_enable && *node_trace_enable != 0){
+        std::copy(
+          this->GetGraph()->OpVector().begin(), this->GetGraph()->OpVector().end(), std::back_inserter(after_op_vector));
+        vx::delegate::utils::MapTfliteNodeToTimVxNode(before_op_vector, after_op_vector, tflite_node_id_map);
+      }
+    }
+    if(node_trace_enable && *node_trace_enable != 0)
+    {
+      vx::delegate::utils::GenerateVxNodeTraceDb(tflite_node_id_map);
     }
 
     TFLITE_LOG(TFLITE_LOG_INFO, "Verifying graph");

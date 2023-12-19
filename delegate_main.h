@@ -68,6 +68,15 @@ typedef struct {
   bool error_during_invoke;
 } VxDelegateOptions;
 
+typedef struct
+{
+  //tflite node unique id
+  std::vector<int> inputs;
+  std::vector<int> outputs;
+  int builtin_code;
+  //tim wx node uid
+  std::vector<uint32_t> op_uids;
+}TfliteNodeIDPair;
 
 class Delegate;
 

@@ -79,6 +79,12 @@ void GenerateWeightsDataForBilinear(float* data,
 void GenerateWeightDataForNearest(float* data,
                                   const std::vector<uint32_t>& weight_shape);
 
+void MapTfliteNodeToTimVxNode(const std::vector<std::shared_ptr<tim::vx::Operation>>& before_op_vector,
+                              const std::vector<std::shared_ptr<tim::vx::Operation>>& after_op_vector,
+                              std::vector<vx::delegate::TfliteNodeIDPair>& tflite_node_id_map);
+
+void GenerateVxNodeTraceDb(std::vector<vx::delegate::TfliteNodeIDPair>& tflite_node_id_map);
+
 template <typename T>
 inline void Quantize(const std::vector<float>& data, float scale,
                                int32_t zero_point, std::vector<T>& quant_data) {

@@ -109,6 +109,53 @@ void GenerateWeightDataForNearest(float* data,
   return;
 }
 
+void MapTfliteNodeToTimVxNode(const std::vector<std::shared_ptr<tim::vx::Operation>>& before_op_vector,
+                              const std::vector<std::shared_ptr<tim::vx::Operation>>& after_op_vector,
+                              std::vector<vx::delegate::TfliteNodeIDPair>& tflite_node_id_map){
+  size_t new_operation_size = after_op_vector.size() - before_op_vector.size();
+  size_t i = 0;
+  std::vector<uint32_t> new_operation;
+  if(new_operation_size <= 0 || tflite_node_id_map.size () == 0)
+  {
+    return;
+  }
+
+  for(i = 0;i<new_operation_size;i++)
+  {
+    size_t new_operation_index = before_op_vector.size();
+    uint32_t uid = after_op_vector[new_operation_index + i]->uid();
+    tflite_node_id_map[tflite_node_id_map.size() -1].op_uids.push_back(uid);
+  }
+  return;
+}
+
+void GenerateVxNodeTraceDb(std::vector<vx::delegate::TfliteNodeIDPair>& tflite_node_id_map)
+{
+  std::fstream f;
+  f.open("vx_node_trace_db", std::ios::out | std::ios::trunc);
+  for(auto tflite_node_id_pair : tflite_node_id_map)
+  {
+    f<< tflite_node_id_pair.builtin_code
+      <<" "<<tflite_node_id_pair.inputs.size()
+      <<" "<<tflite_node_id_pair.outputs.size()
+      <<" "<<tflite_node_id_pair.op_uids.size();
+      for(auto input : tflite_node_id_pair.inputs)
+      {
+      f<<" "<<input;
+      }
+      for(auto output : tflite_node_id_pair.outputs)
+      {
+      f<<" "<<output;
+      }
+      for(auto op_uid : tflite_node_id_pair.op_uids)
+      {
+      f<<" "<<op_uid;
+      }
+      f<<std::endl;
+  }
+  f.close();
+  return;
+}
 }  // namespace utils
 }  // namespace delegate
 }  // namespace vx
