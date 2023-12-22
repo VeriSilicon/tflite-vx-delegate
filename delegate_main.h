@@ -68,6 +68,17 @@ typedef struct {
   bool error_during_invoke;
 } VxDelegateOptions;
 
+#ifdef NODE_TRACE_DB_MODE
+typedef struct
+{
+  //tflite node unique id
+  std::vector<int> inputs;
+  std::vector<int> outputs;
+  int builtin_code;
+  //tim wx node uid
+  std::vector<uint32_t> op_uids;
+}TfliteNodeIDPair;
+#endif
 
 class Delegate;
 
