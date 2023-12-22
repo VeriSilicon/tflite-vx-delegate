@@ -41,6 +41,10 @@
 #include "tim/transform/layout_inference.h"
 #include "tim/transform/mean_stddev_normalize_fusion.h"
 
+#ifdef NODE_TRACE_DB_MODE
+#include "json/json.h"
+#endif
+
 using namespace tflite;
 namespace {
 
@@ -529,6 +533,11 @@ TfLiteStatus Delegate::Invoke(const OpData& op_data,
                               TfLiteContext* context,
                               TfLiteNode* node) {
   TFLITE_LOG(TFLITE_LOG_INFO, "Delegate::Invoke node: %p", node->user_data);
+
+#ifdef NODE_TRACE_DB_MODE
+  std::vector<vx::delegate::TfliteNodeIDPair> tflite_node_id_map;
+#endif
+
   if (!compiled_) {
     // TODO(bo): Handling multi-thread use case
     context_ = tim::vx::Context::Create();
@@ -562,11 +571,28 @@ TfLiteStatus Delegate::Invoke(const OpData& op_data,
       auto& states = op_info.states;
       auto& builtin_data = op_info.builtin_data;
 
+#ifdef NODE_TRACE_DB_MODE
+      vx::delegate::TfliteNodeIDPair tflite_node_id_pair;
+      std::vector<std::shared_ptr<tim::vx::Operation>> before_op_vector;
+      std::vector<std::shared_ptr<tim::vx::Operation>> after_op_vector;
+#endif
+
       std::vector<int> inputs_outputs;
       std::copy(
           inputs.begin(), inputs.end(), std::back_inserter(inputs_outputs));
       std::copy(
           outputs.begin(), outputs.end(), std::back_inserter(inputs_outputs));
+
+#ifdef NODE_TRACE_DB_MODE
+        tflite_node_id_pair.builtin_code = builtin_code;
+        std::copy(
+            inputs.begin(), inputs.end(), std::back_inserter(tflite_node_id_pair.inputs));
+        std::copy(
+            outputs.begin(), outputs.end(), std::back_inserter(tflite_node_id_pair.outputs));
+        std::copy(
+            this->GetGraph()->OpVector().begin(), this->GetGraph()->OpVector().end(), std::back_inserter(before_op_vector));
+        tflite_node_id_map.push_back(tflite_node_id_pair);
+#endif
 
       for (size_t port_idx = 0; port_idx < inputs_outputs.size(); port_idx++) {
         int tensor_idx = inputs_outputs[port_idx];
@@ -634,7 +660,15 @@ TfLiteStatus Delegate::Invoke(const OpData& op_data,
                     states_tensors,
                     builtin_data.data());
       }
+#ifdef NODE_TRACE_DB_MODE
+        std::copy(
+          this->GetGraph()->OpVector().begin(), this->GetGraph()->OpVector().end(), std::back_inserter(after_op_vector));
+        vx::delegate::utils::MapTfliteNodeToTimVxNode(before_op_vector, after_op_vector, tflite_node_id_map);
+#endif
     }
+#ifdef NODE_TRACE_DB_MODE
+      vx::delegate::utils::GenerateVxNodeTraceDb(tflite_node_id_map);
+#endif
 
     TFLITE_LOG(TFLITE_LOG_INFO, "Verifying graph");
     // Do normalization op fusion before layout inference

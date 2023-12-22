@@ -25,6 +25,10 @@
 #include "utils.h"
 #include "tensorflow/lite/minimal_logging.h"
 
+#ifdef NODE_TRACE_DB_MODE
+#include "json/json.h"
+#endif
+
 using namespace tflite;
 
 namespace vx {
@@ -65,7 +69,6 @@ std::vector<uint32_t> GetOvxTransposePerm(const std::vector<uint32_t>& perm) {
 
   return ovx_perm;
 }
-
 
 void GenerateWeightsDataForBilinear(float* data,
                                     const std::vector<uint32_t>& weight_shape,
@@ -108,6 +111,70 @@ void GenerateWeightDataForNearest(float* data,
 
   return;
 }
+
+#ifdef NODE_TRACE_DB_MODE
+void MapTfliteNodeToTimVxNode(
+    const std::vector<std::shared_ptr<tim::vx::Operation>>& before_op_vector,
+    const std::vector<std::shared_ptr<tim::vx::Operation>>& after_op_vector,
+    std::vector<vx::delegate::TfliteNodeIDPair>& tflite_node_id_map) {
+  size_t new_operation_size = after_op_vector.size() - before_op_vector.size();
+  size_t i = 0;
+  std::vector<uint32_t> new_operation;
+  if (new_operation_size <= 0 || tflite_node_id_map.size() == 0) {
+    return;
+  }
+
+  for (i = 0; i < new_operation_size; i++) {
+    size_t new_operation_index = before_op_vector.size();
+    uint32_t uid = after_op_vector[new_operation_index + i]->uid();
+    tflite_node_id_map[tflite_node_id_map.size() - 1].op_uids.push_back(uid);
+  }
+  return;
+}
+
+void GenerateVxNodeTraceDb(
+    std::vector<vx::delegate::TfliteNodeIDPair>& tflite_node_id_map) {
+  Json::Value root;
+
+  Json::StyledWriter sw;
+  uint32_t i = 0;
+  std::fstream fs;
+  fs.open("vx_node_trace_db.json", std::ios::out | std::ios::trunc);
+
+  for (auto tflite_node_id_pair : tflite_node_id_map) {
+    Json::Value tflite_node_uid;
+    Json::Value tim_vx_uids;
+
+    Json::Value inputs_ids;
+    Json::Value outputs_ids;
+    Json::Value tflite_node_builtin_code;
+
+    Json::Value map_pair;
+    for (i = 0; i < tflite_node_id_pair.inputs.size(); i++) {
+      inputs_ids[i] = tflite_node_id_pair.inputs[i];
+    }
+    for (i = 0; i < tflite_node_id_pair.outputs.size(); i++) {
+      outputs_ids[i] = tflite_node_id_pair.outputs[i];
+    }
+    tflite_node_builtin_code = tflite_node_id_pair.builtin_code;
+    tflite_node_uid["inputs"] = inputs_ids;
+    tflite_node_uid["outputs"] = outputs_ids;
+    tflite_node_uid["builtin_code"] = tflite_node_id_pair.builtin_code;
+
+    for (i = 0; i < tflite_node_id_pair.op_uids.size(); i++) {
+      tim_vx_uids[i] = tflite_node_id_pair.op_uids[i];
+    }
+
+    map_pair["tflite_node_id"] = tflite_node_uid;
+    map_pair["tim_vx_uid"] = tim_vx_uids;
+    root.append(map_pair);
+  }
+
+  fs << sw.write(root);
+  fs.close();
+  return;
+}
+#endif
 
 }  // namespace utils
 }  // namespace delegate

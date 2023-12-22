@@ -22,6 +22,7 @@ cmake_minimum_required(VERSION 3.16)
 
 option(TFLITE_ENABLE_MULTI_DEVICE       "Enable multi devices support"          OFF)
 option(TFLITE_ENABLE_OPTIMIZE           "Enable optimize tiny yolov4"           OFF)
+option(TFLITE_ENABLE_NODE_TRACE         "Enable node trace"                     OFF)
 
 if(TFLITE_ENABLE_OPTIMIZE)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DVSI_FEAT_OP_CUSTOM_TINY_YOLOV4_POSTPROCESS -DENABLE_TENSOR_CACHE")
@@ -62,6 +63,10 @@ list(APPEND VX_DELEGATES_SRCS
 
 if(TFLITE_ENABLE_MULTI_DEVICE)
   ADD_DEFINITIONS(-DMULTI_DEVICE_FEATURE_MODE)
+endif()
+
+if(TFLITE_ENABLE_NODE_TRACE)
+  ADD_DEFINITIONS(-DNODE_TRACE_DB_MODE)
 endif()
 
 add_library(vx_delegate SHARED ${VX_DELEGATES_SRCS})
