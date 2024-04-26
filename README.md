@@ -1,8 +1,8 @@
 # TfLite-vx-delegate
-TfLite-vx-delegate constructed with TIM-VX as an openvx delegate for tensorflow lite. Before vx-delegate, you may have nnapi-linux version from Verisilicon, we suggest you move to this new delegate because:
+TfLite-vx-delegate constructed with TIM-VX as an openvx delegate for tensorflow lite. Before vx-delegate, you may have nnapi-linux version from VeriSilicon, we suggest you move to this new delegate because:
 
     1. without nnapi, it's flexible to enable more AI operators.
-    2. vx-delegate is opensourced, and will promised compatible with latest tensorflow release(currently v2.9.0).
+    2. vx-delegate is opensourced, and will promised compatible with latest tensorflow release(currently v2.14.0).
 # Use tflite-vx-delegate
 
 ## Prepare source code
@@ -27,7 +27,7 @@ make vx_delegate -j12
 # benchmark_model
 make benchmark_model -j12
 # label_image
-make lable_image -j12
+make label_image -j12
 ```
 If you would like to build with your own vivante driver sdk and tim-vx build, you need do cross-build as
 ```sh
@@ -36,8 +36,8 @@ mkdir build && cd build
 cmake .. -DCMAKE_TOOLCHAIN_FILE=<toolchain.cmake> -DEXTERNAL_VIV_SDK=<sdk_root>
 # we can also build from a specific ovxlib instead of use default one by set
 # TIM_VX_USE_EXTERNAL_OVXLIB=ON
-# OVXLIB_INC=<direct_to_ovxlib_include>
-# OVXLIB_LIB=<full_patch_to_libovxlib.so>
+# OVXLIB_INC=<directory_to_ovxlib_include>
+# OVXLIB_LIB=<full_path_to_libovxlib.so>
 ```
 
 If you would like to build using local version of tensorflow, you can use `FETCHCONTENT_SOURCE_DIR_TENSORFLOW` cmake variable. Point this variable to your tensorflow tree. For additional details on this variable please see the [official cmake documentation](https://cmake.org/cmake/help/latest/module/FetchContent.html#command:fetchcontent_populate)
@@ -51,13 +51,13 @@ After cmake execution completes, build and run as usual. Beware that cmake proce
 
 ## Enable external delegate support in benchmark_model/label_image
 
-For tensorflow v2.8.0, addtional patch `pwd`/patches/0001-TensorFlow-V280-Enable-External-Delegate.patch requred to enable enable external delegate in benchmark_model/label_image.
+For tensorflow v2.8.0, addtional patch `pwd`/patches/0001-TensorFlow-V280-Enable-External-Delegate.patch requred to enable enable external delegate in benchmark_model/label_image. For higher versions of TensorFlow, the benchmark_model has automatically enabled the external delegate mechanism, but it is still necessary to apply patch `pwd`/patches/label_image_support.patch to enable the external delegate in label_image.
 If tensorflow source code downloaded by cmake, you can find it in <build_output_dir>/_deps/tensorflow-src
 
 The patch get merged into Tensorflow master branch, no patch required for master branch.
 
-## benchmark_model/Label_image compatible with Tflite+NBG
-With our Acuity Toolkit, you can generate tflite file with compiled NBG(**N**etwork **B**inary **G**raph) as a custom operator. To support this special format, you should build benchmark_model/label_image from our delegate repo not use the offical one.
+## benchmark_model/label_image compatible with Tflite+NBG
+With our Acuity Toolkit, you can generate tflite file with compiled NBG(**N**etwork **B**inary **G**raph) as a custom operator. To support this special format, you should build benchmark_model/label_image from our delegate repo and not use the offical one.
 
 ## Run
 ```sh
@@ -66,9 +66,9 @@ With our Acuity Toolkit, you can generate tflite file with compiled NBG(**N**etw
 export VIVANTE_SDK_DIR=<direct_to_sdk_root>
 # Please copy libtim-vx.so to drivers/ directory
 export LD_LIBRARY_PATH=${VIVANTE_SDK_DIR}/drivers:$LD_LIBRARY_PATH # the "drivers" maybe named as lib
-./benchmark_model --external_delegate_path=<patch_to_libvx_delegate.so> --graph=<tflite_model.tflite>
+./benchmark_model --external_delegate_path=<path_to_libvx_delegate.so> --graph=<tflite_model.tflite>
 # If you would like to use cache mode which save and load binary graph in local disk
-./benchmark_model --external_delegate_path=<patch_to_libvx_delegate.so> \
+./benchmark_model --external_delegate_path=<path_to_libvx_delegate.so> \
                   --external_delegate_options='allowed_cache_mode:true;cache_file_path:<cache_file>' \
                   --graph=<tflite_model.tflite>
 ```
@@ -76,7 +76,7 @@ export LD_LIBRARY_PATH=${VIVANTE_SDK_DIR}/drivers:$LD_LIBRARY_PATH # the "driver
 ## Test
 Introduced unit test with tensorflow keras api and convert it to tflite with quantized or none-quantized model,
 Golden generated from CPU implementation of tflite
-[Details for run test](./test/python/READMME.md)
+[Details for run test](./test/python/README.md)
 
 [Model verification script](./test/python/run_model.py) to compare NPU result with CPU result
 
@@ -91,7 +91,7 @@ examples/minimal
 modified based on [offical minimal](https://cs.opensource.google/tensorflow/tensorflow/+/master:tensorflow/lite/examples/minimal/)
 
 ```sh
-minimal <patch_to_libvx_delegate.so> <tflite_model.tflite>
+minimal <path_to_libvx_delegate.so> <tflite_model.tflite>
 # If you would like to use cache mode which save and load binary graph in local disk
-minimal <patch_to_libvx_delegate.so> <tflite_model.tflite> use_cache_mode <cache_file>
+minimal <path_to_libvx_delegate.so> <tflite_model.tflite> use_cache_mode <cache_file>
 ```
