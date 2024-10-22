@@ -3052,8 +3052,8 @@ struct Slice : public OpMapperBase<EmptyStructPlaceholder> {
 
     for (int i = 0; i < size.size(); i++) {
       if (size[i] == -1) {  // If size[i] == -1, that means extract all
-                            // elements of demension i.
-        size[i] = input_tensor->GetShape()[i];
+                            // elements of demension i subtract the begin[i] .
+        size[i] = input_tensor->GetShape()[i] - begin[i];
       }
     }
 
