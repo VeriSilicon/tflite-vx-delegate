@@ -47,14 +47,14 @@ void setupInput(int argc,
   auto input_list = interpreter->inputs();
   bool use_random_input = false;
 
-  if ((!is_cache_mode && input_list.size() != argc - 4) ||
-      (is_cache_mode && input_list.size() != argc - 6)) {
+  if ((!is_cache_mode && input_list.size() != argc - 3) ||
+      (is_cache_mode && input_list.size() != argc - 5)) {
     std::cout << "Warning: input count not match between command line and "
                  "model -> generate random data for inputs"
               << std::endl;
     use_random_input = true;
   }
-  uint32_t i = is_cache_mode ? 6 : 4;
+  uint32_t i = is_cache_mode ? 5 : 3;
   //uint32_t i = 4; // argv index
 
   for (auto input_idx = 0; input_idx < input_list.size(); input_idx++) {
