@@ -32,6 +32,7 @@
 #include <iostream>
 #include <cassert>
 #include <math.h>
+#include <cstdint>
 
 #define TFLITE_EXAMPLE_CHECK(x)                              \
   if (!(x)) {                                                \
