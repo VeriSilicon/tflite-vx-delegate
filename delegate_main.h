@@ -154,8 +154,7 @@ class Delegate {
   std::vector<std::shared_ptr<tim::vx::platform::IDevice>> devices_;
   std::shared_ptr<tim::vx::platform::IExecutor> executor_;
   std::shared_ptr<tim::vx::platform::IExecutable> executable_;
-  std::vector<std::shared_ptr<tim::vx::platform::ITensorHandle>> inputs_;
-  std::vector<std::shared_ptr<tim::vx::platform::ITensorHandle>> outputs_;
+  std::map<int32_t, std::shared_ptr<tim::vx::platform::ITensorHandle>> tensor_handles_;
   int32_t core_index_;
   int32_t core_count_;
 #endif

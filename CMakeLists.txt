@@ -61,6 +61,11 @@ list(APPEND VX_DELEGATES_SRCS
   ${CMAKE_CURRENT_SOURCE_DIR}/vx_delegate_adaptor.cc
 )
 
+if(EXISTS "${TIM_VX_INSTALL}/include/tim/vx/platform/platform.h")
+set(TFLITE_ENABLE_MULTI_DEVICE ON)
+message(STATUS "Find tim/vx/platform/platform.h, set TFLITE_ENABLE_MULTI_DEVICE=ON.")
+endif()
+
 if(TFLITE_ENABLE_MULTI_DEVICE)
   ADD_DEFINITIONS(-DMULTI_DEVICE_FEATURE_MODE)
 endif()

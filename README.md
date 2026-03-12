@@ -53,10 +53,9 @@ cmake .. -DCMAKE_TOOLCHAIN_FILE=<toolchain.cmake> -DEXTERNAL_VIV_SDK=<no_kernel_
          -DTIM_VX_ENABLE_PLATFORM_LITE=ON  -DVIP_LITE_SDK=<viplite_sdk_root>
 
 #build tflite-vx-delegate
-# The TFLITE_ENABLE_MULTI_DEVICE option needs to be enabled
 cd tflite-vx-delegate
 mkdir cmake_build && cd cmake_build
-cmake .. -DEXTERNAL_VIV_SDK=<no_kernel_sdk_root> -DTIM_VX_INSTALL=<directory_to_tim-vx_install> -DTFLITE_ENABLE_MULTI_DEVICE=ON
+cmake .. -DEXTERNAL_VIV_SDK=<no_kernel_sdk_root> -DTIM_VX_INSTALL=<directory_to_tim-vx_install>
 
 ```
 
@@ -91,6 +90,15 @@ export LD_LIBRARY_PATH=${VIVANTE_SDK_DIR}/drivers:$LD_LIBRARY_PATH # the "driver
 ./benchmark_model --external_delegate_path=<path_to_libvx_delegate.so> \
                   --external_delegate_options='allowed_cache_mode:true;cache_file_path:<cache_file>' \
                   --graph=<tflite_model.tflite>
+```
+Run with VIPLITE_SDK
+```sh
+#If you enable tim-vx LITE platform, you can run it with VIPLITE driver
+export VIV_GPU_FILE=<path_to_your_npu_ip_config_file> #eg:VIP9000NANOSI_PLUS_PID0X10000060.config
+export VIVANTE_SDK_DIR=<direct_to_sdk_root>
+# Please copy libtim-vx.so to drivers/ directory
+export LD_LIBRARY_PATH=${VIVANTE_SDK_DIR}/drivers:<direct_to_viplite_sdk/drivers>:$LD_LIBRARY_PATH # the "drivers" maybe named as lib
+./benchmark_model --external_delegate_path=<path_to_libvx_delegate.so> --graph=<tflite_model.tflite>
 ```
 
 ## Test

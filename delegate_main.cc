@@ -430,34 +430,10 @@ std::unique_ptr<vx::delegate::OpData> Delegate::Init(
     nbg_size_ = fs_.tellg();
     fs_.close();
   }
-
+  device_id_ = derivedDelegate->device_id;
 #ifdef MULTI_DEVICE_FEATURE_MODE
-    devices_ = tim::vx::platform::IDevice::Enumerate();
-    device_id_ = derivedDelegate->device_id;
-    core_index_ = derivedDelegate->core_index;
-    core_count_ = derivedDelegate->core_count;
-    if (devices_.size() < 1) {
-      TFLITE_LOG(TFLITE_LOG_ERROR, "Failed to enumerate NPU device!");
-      return kTfLiteDelegateError;
-    }
-    if (device_id_ >= devices_.size()) {
-      TFLITE_LOG(TFLITE_LOG_WARNING,
-                 "vx_delegate Delegate::Init: device_id(%d) exceeds the count of devices(%d). Use device 0 as default",
-                 device_id_, devices_.size());
-      device_id_ = 0;
-    }
-    auto device = devices_.at(device_id_);
-    auto total_core_count = device->CoreCount();
-    core_index_ = core_index_ < 0 ? 0 : core_index_;
-    core_index_ = core_index_ >= total_core_count ? 0 : core_index_;
-    core_count_ = core_count_ < 1 ? total_core_count : core_count_;
-    if (core_index_ + core_count_ > total_core_count) {
-      core_count_ = total_core_count - core_index_;
-      TFLITE_LOG(TFLITE_LOG_WARNING,
-                 "vx_delegate Delegate::Init: core_index(%d) + core_count(%d) exceeds the count of core(%d). Fix the \
-                  the core count to %d",
-                 core_index_, derivedDelegate->core_count, total_core_count, core_count_);
-    }
+  core_index_ = derivedDelegate->core_index;
+  core_count_ = derivedDelegate->core_count;
 #endif
 
   compiled_ = false;
@@ -552,6 +528,38 @@ TfLiteStatus Delegate::Prepare(const OpData& op_data,
                                TfLiteContext* context,
                                TfLiteNode* node) {
   TFLITE_LOG(TFLITE_LOG_INFO, "Delegate::Prepare node: %p", node->user_data);
+#ifdef MULTI_DEVICE_FEATURE_MODE
+    devices_ = tim::vx::platform::IDevice::Enumerate();
+
+    if (devices_.size() < 1) {
+      TFLITE_LOG(TFLITE_LOG_ERROR, "Failed to enumerate NPU device!");
+      return kTfLiteDelegateError;
+    }
+    if (device_id_ >= devices_.size()) {
+      TFLITE_LOG(TFLITE_LOG_WARNING,
+                 "vx_delegate Delegate::Init: device_id(%d) exceeds the count of devices(%d). Use device 0 as default",
+                 device_id_, devices_.size());
+      device_id_ = 0;
+    }
+    auto device = devices_.at(device_id_);
+    auto total_core_count = device->CoreCount();
+    auto org_core_count = core_count_;
+    core_index_ = core_index_ < 0 ? 0 : core_index_;
+    core_index_ = core_index_ >= total_core_count ? 0 : core_index_;
+    core_count_ = core_count_ < 1 ? total_core_count : core_count_;
+    if (core_index_ + core_count_ > total_core_count) {
+      core_count_ = total_core_count - core_index_;
+      TFLITE_LOG(TFLITE_LOG_WARNING,
+                 "vx_delegate Delegate::Init: core_index(%d) + core_count(%d) exceeds the count of core(%d). Fix the \
+                  the core count to %d",
+                 core_index_, org_core_count, total_core_count, core_count_);
+    }
+    executor_ = devices_[device_id_]->CreateExecutor(core_index_, core_count_, context_);
+    if (!executor_) {
+      TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "Failed to create TIM-VX executor!");
+      return kTfLiteDelegateError;
+    }
+#endif
   return kTfLiteOk;
 }
 
@@ -568,6 +576,7 @@ TfLiteStatus Delegate::Invoke(const OpData& op_data,
     // TODO(bo): Handling multi-thread use case
     context_ = tim::vx::Context::Create();
     graph_ = context_->CreateGraph();
+    bool has_nbg_op = false;
 
     // Create input tensors
     for (int tensor_idx : op_data.subgraph_inputs) {
@@ -677,6 +686,9 @@ TfLiteStatus Delegate::Invoke(const OpData& op_data,
                     outputs_tensors,
                     states_tensors,
                     builtin_data.data());
+        if(custom_name == "vsi-npu") {
+          has_nbg_op = true;
+        }
       } else {
         vx::op_map::SupportedBuiltinOps()
             .at(builtin_code)
@@ -701,28 +713,29 @@ TfLiteStatus Delegate::Invoke(const OpData& op_data,
     tim::transform::MeanStdDevNormalization(graph_);
     // Do layout inference and get a new graph(first) and a tensor map(second).
     layout_infered_ = tim::transform::LayoutInference(graph_, context_);
+    if(is_cache_present_ && !is_cache_present_.value() && !has_nbg_op){
 #ifdef MULTI_DEVICE_FEATURE_MODE
-      executor_ = devices_[device_id_]->CreateExecutor(core_index_, core_count_, context_);
-      if (!executor_) {
-        TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "Failed to create TIM-VX executor!");
-        return kTfLiteDelegateError;
+      std::vector<char> nbg_buf;
+      nbg_buf = executor_->CompileToBinary(layout_infered_.first);
+      nbg_size_ = nbg_buf.size();
+
+      if(nbg_size_ > 0) {
+        executable_ = executor_->CreateExecutable(
+          nbg_buf, op_data.subgraph_inputs.size(), op_data.subgraph_outputs.size());
+        if (executable_ ) {
+          compiled_ = true;
+        }
       }
-      executable_ = tim::vx::platform::Compile(layout_infered_.first, executor_);
-      if(!executable_){
-        TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "Compile graph failed!");
-        return kTfLiteDelegateError;
-      }
-      compiled_ = true;
 #else
-    if(is_cache_present_ && !is_cache_present_.value()){
       nbg_size_ = -1;
       compiled_ = layout_infered_.first->CompileToBinary(nullptr, &nbg_size_);
       if (!compiled_) {
         TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "compile to binary failed");
         return kTfLiteDelegateError;
         }
-        std::vector<uint8_t> nbg_buf(nbg_size_);
+        std::vector<char> nbg_buf(nbg_size_);
         compiled_ = layout_infered_.first->CompileToBinary(nbg_buf.data(), &nbg_size_);
+#endif
         if (!compiled_) {
           TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "compile to binary failed");
           return kTfLiteDelegateError;
@@ -730,21 +743,44 @@ TfLiteStatus Delegate::Invoke(const OpData& op_data,
         fs_.write(reinterpret_cast<const char*>(nbg_buf.data()),nbg_size_);
         fs_.close();
     } else {
+#ifdef MULTI_DEVICE_FEATURE_MODE
+      if(has_nbg_op) {
+          std::vector<char> nbg_buf;
+          auto& operation = operations_[0];
+          TfLiteVsiNpuParams* nbg_param =
+          reinterpret_cast<TfLiteVsiNpuParams*>(operation.builtin_data.data());
+          nbg_size_ = nbg_param->length;
+          nbg_buf.assign(nbg_param->binary,nbg_param->binary + nbg_size_ );
+
+          auto input_count = nbg_param->input_count;
+          auto output_cout = nbg_param->output_cout;
+          //identify inputs/outputs
+          if(input_count != op_data.subgraph_inputs.size() ||
+             output_cout != op_data.subgraph_outputs.size()) {
+              TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "Failed to identify cache inputs/outputs!");
+              return kTfLiteDelegateError;
+            }
+           executable_ = executor_->CreateExecutable(nbg_buf,input_count,output_cout);
+      } else {
+        executable_ = tim::vx::platform::Compile(layout_infered_.first, executor_);
+      }
+      if(executable_) {
+        compiled_ = true;
+      }
+#else
       compiled_ = layout_infered_.first->Compile();
+#endif
       if (!compiled_) {
         TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "Failed to verify graph");
         return kTfLiteDelegateError;
       }
       TFLITE_LOG(TFLITE_LOG_INFO, "Verified graph");
     }
-#endif
   }
 
-  int tensor_index = 0;
   // TODO(derekjchow): Return error if compilation failed.
   for (int tensor_idx : op_data.subgraph_inputs) {
     const TfLiteTensor& tf_tensor = context->tensors[tensor_idx];
-    TFLITE_LOG(TFLITE_LOG_INFO, "Copying input %d: %s", tensor_idx, tf_tensor.name);
     auto src_input_tensor = tensors_[tensor_idx];
     if (!src_input_tensor.get()) {
       TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "Failed to copy input tensor!");
@@ -758,36 +794,37 @@ TfLiteStatus Delegate::Invoke(const OpData& op_data,
     if (infered_input_tensor) {
 #ifdef MULTI_DEVICE_FEATURE_MODE
     auto input_spec = infered_input_tensor->GetSpec();
-    if(inputs_.size() <= tensor_index){
-      inputs_.push_back(executable_->AllocateTensor(input_spec));
-      executable_->SetInput(inputs_[tensor_index]);
+    if(!tensor_handles_.count(tensor_idx)){
+      tensor_handles_[tensor_idx] = executable_->AllocateTensor(input_spec);
+      executable_->SetInput(tensor_handles_[tensor_idx]);
     }
-    inputs_[tensor_index]->CopyDataToTensor(tensor_data,
+    tensor_handles_[tensor_idx]->CopyDataToTensor(tensor_data,
                                             input_spec.GetByteSize());
 #else
-      infered_input_tensor->CopyDataToTensor(const_cast<void*>(tensor_data));
+    infered_input_tensor->CopyDataToTensor(const_cast<void*>(tensor_data));
 #endif
     } else {
       TFLITE_LOG_PROD(TFLITE_LOG_WARNING,
                       "tensor in source graph removed before do layout "
                       "inference - if zero sized tensor involved");
     }
-    tensor_index++;
   }
 
 #ifdef MULTI_DEVICE_FEATURE_MODE
-  tensor_index = 0;
   for (int tensor_idx : op_data.subgraph_outputs) {
     TfLiteTensor& tf_tensor = context->tensors[tensor_idx];
-    TFLITE_LOG(TFLITE_LOG_INFO, "Copying outputs %d: %s", tensor_idx, tf_tensor.name);
     auto src_output_tensor = tensors_[tensor_idx];
+    if(src_output_tensor) {
+      auto output_spec =src_output_tensor->GetSpec();
+      if(!tensor_handles_.count(tensor_idx)){
+        tensor_handles_[tensor_idx] = executable_->AllocateTensor(output_spec);
+        executable_->SetOutput(tensor_handles_[tensor_idx]);
+      }
+    } else {
+        TFLITE_LOG_PROD(TFLITE_LOG_ERROR, "Failed to get output tensor!");
+        return kTfLiteDelegateError;
+      }
 
-    if(outputs_.size() <= tensor_index){
-      outputs_.push_back(
-          executable_->AllocateTensor(src_output_tensor->GetSpec()));
-      executable_->SetOutput(outputs_[tensor_index]);
-    }
-    tensor_index++;
   }
 #endif
 
@@ -801,15 +838,11 @@ TfLiteStatus Delegate::Invoke(const OpData& op_data,
       return kTfLiteDelegateError;
     }
 #endif
-  tensor_index = 0;
   for (int tensor_idx : op_data.subgraph_outputs) {
     TfLiteTensor& tf_tensor = context->tensors[tensor_idx];
-    TFLITE_LOG(
-        TFLITE_LOG_INFO, "Copying output %d, %s", tensor_idx, tf_tensor.name);
+    void* tensor_data = reinterpret_cast<void*>(tf_tensor.data.raw);
 #ifdef MULTI_DEVICE_FEATURE_MODE
-      void* tensor_data = reinterpret_cast<void*>(tf_tensor.data.raw);
-      outputs_[tensor_index]->CopyDataFromTensor(tensor_data);
-      tensor_index++;
+      tensor_handles_[tensor_idx]->CopyDataFromTensor(tensor_data);
   }
 #else
       auto src_output_tensor = tensors_[tensor_idx];
@@ -818,7 +851,6 @@ TfLiteStatus Delegate::Invoke(const OpData& op_data,
         return kTfLiteDelegateError;
       }
 
-      void* tensor_data = reinterpret_cast<void*>(tf_tensor.data.raw);
       auto infered_output_tesnor = layout_infered_.second[src_output_tensor];
       if (infered_output_tesnor) {
         infered_output_tesnor->CopyDataFromTensor(tensor_data);
@@ -827,7 +859,7 @@ TfLiteStatus Delegate::Invoke(const OpData& op_data,
                    "Output tensor missing: report issue to VSI");
       }
   }
-
+#endif
   // Copy output states to input states
   for (int tensor_idx : op_data.subgraph_states) {
     TfLiteTensor& tf_tensor = context->tensors[tensor_idx];
@@ -842,7 +874,6 @@ TfLiteStatus Delegate::Invoke(const OpData& op_data,
     auto infered_state_tensor = layout_infered_.second[src_state_tensor];
     infered_state_tensor->CopyDataFromTensor(tensor_data);
   }
-#endif
   return kTfLiteOk;
 }
 
